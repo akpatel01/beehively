@@ -1,4 +1,4 @@
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000/api'
+import apiClient, { extractAxiosErrorMessage } from './apiClient'
 
 type SignupPayload = {
     name: string
@@ -20,35 +20,21 @@ type AuthResponse = {
         email: string
     }
 }
-
-const parseResponse = async <T>(response: Response): Promise<T> => {
-    const data = await response.json().catch(() => ({}))
-
-    if (!response.ok) {
-        const message = (data && (data as { message?: string }).message) || 'Request failed'
-        throw new Error(message)
-    }
-
-    return data as T
-}
-
 export const signup = async (payload: SignupPayload) => {
-    const response = await fetch(`${API_BASE_URL}/auth/signup`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-    })
-
-    return parseResponse<AuthResponse>(response)
+    try {
+        const { data } = await apiClient.post<AuthResponse>('/auth/signup', payload)
+        return data
+    } catch (error) {
+        throw new Error(extractAxiosErrorMessage(error))
+    }
 }
 
 export const login = async (payload: LoginPayload) => {
-    const response = await fetch(`${API_BASE_URL}/auth/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-    })
-
-    return parseResponse<AuthResponse>(response)
+    try {
+        const { data } = await apiClient.post<AuthResponse>('/auth/login', payload)
+        return data
+    } catch (error) {
+        throw new Error(extractAxiosErrorMessage(error))
+    }
 }
 
