@@ -27,7 +27,7 @@ const Profile = () => {
 
   const [userName, setUserName] = useState("Guest");
   const [userId, setUserId] = useState<string | null>(null);
-  const [posts, setPosts] = useState<Post[]>([]);
+  const [allPosts, setAllPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [statusFilter, setStatusFilter] = useState<Post["status"] | "all">(
@@ -49,6 +49,13 @@ const Profile = () => {
   );
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const [undoInfo, setUndoInfo] = useState<UndoInfo | null>(null);
+
+  const filteredPosts = useMemo(() => {
+    if (statusFilter === "all") {
+      return allPosts;
+    }
+    return allPosts.filter((post) => post.status === statusFilter);
+  }, [allPosts, statusFilter]);
 
   useEffect(() => {
     getUserData();
@@ -94,7 +101,7 @@ const Profile = () => {
 
   const fetchUserPosts = async () => {
     if (!userId) {
-      setPosts([]);
+      setAllPosts([]);
       setLoading(false);
       return;
     }
@@ -104,9 +111,8 @@ const Profile = () => {
       setError("");
       const response = await listPosts({
         author: userId,
-        status: statusFilter === "all" ? undefined : statusFilter,
       });
-      setPosts(response.posts || []);
+      setAllPosts(response.posts || []);
       setSelectedPostIds([]);
     } catch (apiError) {
       const message =
@@ -122,13 +128,13 @@ const Profile = () => {
       return "Loading your posts...";
     }
 
-    const count = posts.length;
+    const count = filteredPosts.length;
     if (!count) {
       return "You have no posts yet.";
     }
 
     return count === 1 ? "You have 1 post." : `You have ${count} posts.`;
-  }, [loading, posts.length]);
+  }, [loading, filteredPosts.length]);
 
   const handleCreatePost = () => {
     navigate("/create-post");
@@ -138,7 +144,10 @@ const Profile = () => {
     navigate(`/content/${id}`);
   };
 
-  const selectableIds = useMemo(() => posts.map((post) => post._id), [posts]);
+  const selectableIds = useMemo(
+    () => filteredPosts.map((post) => post._id),
+    [filteredPosts]
+  );
   const isAllSelected =
     selectableIds.length > 0 && selectedPostIds.length === selectableIds.length;
   const selectedCount = selectedPostIds.length;
@@ -161,7 +170,7 @@ const Profile = () => {
   const clearSelection = () => setSelectedPostIds([]);
 
   const handleEditPost = (id: string) => {
-    const postToEdit = posts.find((item) => item._id === id);
+    const postToEdit = allPosts.find((item) => item._id === id);
     if (!postToEdit) {
       return;
     }
@@ -232,7 +241,7 @@ const Profile = () => {
         tags: normalizedTags,
       });
 
-      setPosts((prev) =>
+      setAllPosts((prev) =>
         prev.map((item) => (item._id === id ? response.post : item))
       );
       handleCancelEdit();
@@ -266,7 +275,7 @@ const Profile = () => {
   };
 
   const openBulkDeleteModal = () => {
-    const postsToDelete = posts.filter((post) =>
+    const postsToDelete = filteredPosts.filter((post) =>
       selectedPostIds.includes(post._id)
     );
     if (!postsToDelete.length) {
@@ -284,7 +293,7 @@ const Profile = () => {
       setDeletingPostId(post._id);
       setError("");
       await deletePost(post._id);
-      setPosts((prev) => prev.filter((item) => item._id !== post._id));
+      setAllPosts((prev) => prev.filter((item) => item._id !== post._id));
       setSelectedPostIds((prev) => prev.filter((id) => id !== post._id));
       if (editingPostId === post._id) {
         handleCancelEdit();
@@ -316,7 +325,7 @@ const Profile = () => {
       setBulkDeleting(true);
       setError("");
       await bulkDeletePosts({ ids });
-      setPosts((prev) => prev.filter((item) => !ids.includes(item._id)));
+      setAllPosts((prev) => prev.filter((item) => !ids.includes(item._id)));
       setSelectedPostIds((prev) => prev.filter((id) => !ids.includes(id)));
       setUndoInfo({
         posts: pendingBulkDeletePosts,
@@ -348,7 +357,7 @@ const Profile = () => {
       setError("");
       const response = await restorePosts({ ids });
       const restoredPosts = response.posts ?? [];
-      setPosts((prev) => {
+      setAllPosts((prev) => {
         const existingIds = new Set(prev.map((item) => item._id));
         const postsToAdd = (
           restoredPosts.length ? restoredPosts : undoInfo.posts
@@ -371,11 +380,11 @@ const Profile = () => {
 
   const sortedPosts = useMemo(
     () =>
-      [...posts].sort(
+      [...filteredPosts].sort(
         (a, b) =>
           new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
       ),
-    [posts]
+    [filteredPosts]
   );
 
   const statusBadgeClass = (status: Post["status"]) => {
@@ -446,7 +455,7 @@ const Profile = () => {
             </div>
           )}
 
-          {!loading && !error && posts.length > 0 && (
+          {!loading && !error && filteredPosts.length > 0 && (
             <div className="bg-white border border-gray-200 rounded-xl p-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <label className="flex items-center gap-2 text-sm text-gray-700">
                 <input
@@ -785,9 +794,11 @@ const Profile = () => {
             </div>
           )}
 
-          {!loading && !error && posts.length === 0 && (
+          {!loading && !error && filteredPosts.length === 0 && (
             <div className="bg-white border border-gray-200 rounded-xl p-8 text-center text-gray-500 text-sm">
-              No posts yet. Hit the button above to create your first one.
+              {statusFilter === "all"
+                ? "No posts yet. Hit the button above to create your first one."
+                : "No posts found for this status."}
             </div>
           )}
         </div>
