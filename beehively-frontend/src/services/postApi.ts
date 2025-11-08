@@ -35,6 +35,27 @@ type ListPostsResponse = {
     posts: Post[]
 }
 
+type UpdatePostPayload = {
+    title?: string
+    content?: string
+    status?: Post['status']
+    tags?: string[]
+}
+
+type UpdatePostResponse = {
+    message: string
+    post: Post
+}
+
+type DeletePostResponse = {
+    message: string
+}
+
+type GetPostResponse = {
+    message: string
+    post: Post
+}
+
 export const createPost = async (payload: CreatePostPayload) => {
     try {
         const { data } = await apiClient.post<CreatePostResponse>('/posts/create-post', payload)
@@ -47,6 +68,33 @@ export const createPost = async (payload: CreatePostPayload) => {
 export const listPosts = async (params?: { status?: Post['status']; author?: string }) => {
     try {
         const { data } = await apiClient.get<ListPostsResponse>('/posts/get-posts', { params })
+        return data
+    } catch (error) {
+        throw new Error(extractAxiosErrorMessage(error))
+    }
+}
+
+export const updatePost = async (id: string, payload: UpdatePostPayload) => {
+    try {
+        const { data } = await apiClient.put<UpdatePostResponse>(`/posts/update-post/${id}`, payload)
+        return data
+    } catch (error) {
+        throw new Error(extractAxiosErrorMessage(error))
+    }
+}
+
+export const deletePost = async (id: string) => {
+    try {
+        const { data } = await apiClient.delete<DeletePostResponse>(`/posts/delete-post/${id}`)
+        return data
+    } catch (error) {
+        throw new Error(extractAxiosErrorMessage(error))
+    }
+}
+
+export const getPostById = async (id: string) => {
+    try {
+        const { data } = await apiClient.get<GetPostResponse>(`/posts/get-post/${id}`)
         return data
     } catch (error) {
         throw new Error(extractAxiosErrorMessage(error))

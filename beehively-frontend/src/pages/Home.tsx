@@ -13,7 +13,7 @@ const getAuthorName = (author: Post["author"]) => {
     return author;
   }
 
-  return author.name || author.email || "Unknown author";
+  return author.name || "Unknown author";
 };
 
 const Home = () => {
@@ -24,23 +24,23 @@ const Home = () => {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    const fetchPosts = async () => {
-      try {
-        setLoading(true);
-        setError("");
-        const response = await listPosts({ status: "published" });
-        setPosts(response.posts);
-      } catch (apiError) {
-        const message =
-          apiError instanceof Error ? apiError.message : "Failed to load posts";
-        setError(message);
-      } finally {
-        setLoading(false);
-      }
-    };
-
     fetchPosts();
   }, []);
+
+  const fetchPosts = async () => {
+    try {
+      setLoading(true);
+      setError("");
+      const response = await listPosts({ status: "published" });
+      setPosts(response.posts);
+    } catch (apiError) {
+      const message =
+        apiError instanceof Error ? apiError.message : "Failed to load posts";
+      setError(message);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const sortedPosts = useMemo(() => {
     const sorted = [...posts];
