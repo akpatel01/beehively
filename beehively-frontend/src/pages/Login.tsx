@@ -111,7 +111,6 @@ const Login = () => {
 
           {/* Form */}
           <form onSubmit={handleSubmit} className="space-y-5">
-            {/* Email field */}
             <div className="space-y-2">
               <label
                 htmlFor="email"
@@ -134,7 +133,6 @@ const Login = () => {
               )}
             </div>
 
-            {/* Password field */}
             <div className="space-y-2">
               <label
                 htmlFor="password"
@@ -171,7 +169,6 @@ const Login = () => {
               )}
             </div>
 
-            {/* Remember me */}
             <div className="flex items-center justify-between text-sm">
               <label className="flex items-center gap-2 cursor-pointer group">
                 <input
@@ -190,7 +187,6 @@ const Login = () => {
               <p className="text-sm text-red-500 text-center">{error}</p>
             )}
 
-            {/* Submit button */}
             <button
               type="submit"
               disabled={loading}
@@ -200,7 +196,6 @@ const Login = () => {
               {loading ? "Signing in..." : "Sign in"}
             </button>
 
-            {/* Divider */}
             <div className="relative my-6">
               <div className="absolute inset-0 flex items-center">
                 <div className="w-full border-t border-gray-300"></div>
@@ -212,7 +207,6 @@ const Login = () => {
               </div>
             </div>
 
-            {/* Sign up link */}
             <p className="text-center text-sm text-gray-600 mt-6">
               Don't have an account?{" "}
               <button

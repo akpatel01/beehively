@@ -22,6 +22,7 @@ const Home = () => {
   const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [searchTerm, setSearchTerm] = useState("");
 
   useEffect(() => {
     fetchPosts();
@@ -43,7 +44,11 @@ const Home = () => {
   };
 
   const sortedPosts = useMemo(() => {
-    const sorted = [...posts];
+    const term = searchTerm.trim().toLowerCase();
+    const filtered = term
+      ? posts.filter((post) => post.title.toLowerCase().includes(term))
+      : posts;
+    const sorted = [...filtered];
 
     if (sortBy === "newest") {
       sorted.sort(
@@ -60,7 +65,7 @@ const Home = () => {
     }
 
     return sorted;
-  }, [posts, sortBy]);
+  }, [posts, sortBy, searchTerm]);
 
   return (
     <div className="min-h-[calc(100vh-80px)]">
@@ -77,42 +82,71 @@ const Home = () => {
               </p>
             </div>
 
-            {/* Sorting buttons */}
-            <div className="flex flex-wrap items-center justify-center gap-3">
-              <span className="text-sm font-medium text-gray-600">
-                Sort by:
-              </span>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => setSortBy("newest")}
-                  className={
-                    sortBy === "newest"
-                      ? "px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-lg"
-                      : "px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 bg-white border border-gray-300 text-gray-700 hover:bg-gray-50"
-                  }
+            {/* Search + Sorting */}
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+              <div className="w-full sm:max-w-sm">
+                <label
+                  htmlFor="search-posts"
+                  className="block text-sm font-semibold text-gray-700 mb-2"
                 >
-                  Newest First
-                </button>
-                <button
-                  onClick={() => setSortBy("oldest")}
-                  className={
-                    sortBy === "oldest"
-                      ? "px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-lg"
-                      : "px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 bg-white border border-gray-300 text-gray-700 hover:bg-gray-50"
-                  }
-                >
-                  Oldest First
-                </button>
-                <button
-                  onClick={() => setSortBy("title")}
-                  className={
-                    sortBy === "title"
-                      ? "px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-lg"
-                      : "px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 bg-white border border-gray-300 text-gray-700 hover:bg-gray-50"
-                  }
-                >
-                  A-Z Title
-                </button>
+                  Search by title
+                </label>
+                <div className="relative">
+                  <input
+                    id="search-posts"
+                    type="search"
+                    value={searchTerm}
+                    onChange={(event) => setSearchTerm(event.target.value)}
+                    placeholder="Search posts"
+                    className="w-full rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm text-gray-800 shadow-sm focus:border-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-400/50"
+                  />
+                  {searchTerm && (
+                    <button
+                      type="button"
+                      onClick={() => setSearchTerm("")}
+                      className="absolute inset-y-0 right-2 flex items-center text-xs font-semibold text-amber-600 hover:text-amber-500"
+                    >
+                      Clear
+                    </button>
+                  )}
+                </div>
+              </div>
+              <div className="flex flex-wrap items-center gap-3 justify-center sm:justify-end">
+                <span className="text-sm font-medium text-gray-600">
+                  Sort by:
+                </span>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setSortBy("newest")}
+                    className={
+                      sortBy === "newest"
+                        ? "px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-lg"
+                        : "px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 bg-white border border-gray-300 text-gray-700 hover:bg-gray-50"
+                    }
+                  >
+                    Newest
+                  </button>
+                  <button
+                    onClick={() => setSortBy("oldest")}
+                    className={
+                      sortBy === "oldest"
+                        ? "px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-lg"
+                        : "px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 bg-white border border-gray-300 text-gray-700 hover:bg-gray-50"
+                    }
+                  >
+                    Oldest
+                  </button>
+                  <button
+                    onClick={() => setSortBy("title")}
+                    className={
+                      sortBy === "title"
+                        ? "px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-lg"
+                        : "px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 bg-white border border-gray-300 text-gray-700 hover:bg-gray-50"
+                    }
+                  >
+                    A–Z
+                  </button>
+                </div>
               </div>
             </div>
           </div>

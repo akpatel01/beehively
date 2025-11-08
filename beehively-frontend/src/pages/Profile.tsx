@@ -2,8 +2,10 @@ import { useNavigate } from "react-router-dom";
 import { useEffect, useMemo, useState } from "react";
 import type { FormEvent, KeyboardEvent } from "react";
 import {
+  bulkDeletePosts,
   deletePost,
   listPosts,
+  restorePosts,
   updatePost,
   type Post,
 } from "../services/postApi";
@@ -15,6 +17,11 @@ type EditFormState = {
   tags: string;
 };
 
+type UndoInfo = {
+  posts: Post[];
+  message: string;
+};
+
 const Profile = () => {
   const navigate = useNavigate();
 
@@ -23,6 +30,9 @@ const Profile = () => {
   const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [statusFilter, setStatusFilter] = useState<Post["status"] | "all">(
+    "all"
+  );
   const [editingPostId, setEditingPostId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<EditFormState>({
     title: "",
@@ -33,6 +43,12 @@ const Profile = () => {
   const [savingPostId, setSavingPostId] = useState<string | null>(null);
   const [deletingPostId, setDeletingPostId] = useState<string | null>(null);
   const [pendingDeletePost, setPendingDeletePost] = useState<Post | null>(null);
+  const [selectedPostIds, setSelectedPostIds] = useState<string[]>([]);
+  const [pendingBulkDeletePosts, setPendingBulkDeletePosts] = useState<Post[]>(
+    []
+  );
+  const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [undoInfo, setUndoInfo] = useState<UndoInfo | null>(null);
 
   useEffect(() => {
     getUserData();
@@ -74,7 +90,7 @@ const Profile = () => {
 
   useEffect(() => {
     fetchUserPosts();
-  }, [userId]);
+  }, [userId, statusFilter]);
 
   const fetchUserPosts = async () => {
     if (!userId) {
@@ -86,8 +102,12 @@ const Profile = () => {
     try {
       setLoading(true);
       setError("");
-      const response = await listPosts({ author: userId });
+      const response = await listPosts({
+        author: userId,
+        status: statusFilter === "all" ? undefined : statusFilter,
+      });
       setPosts(response.posts || []);
+      setSelectedPostIds([]);
     } catch (apiError) {
       const message =
         apiError instanceof Error ? apiError.message : "Failed to load posts";
@@ -117,6 +137,28 @@ const Profile = () => {
   const handleOpenPost = (id: string) => {
     navigate(`/content/${id}`);
   };
+
+  const selectableIds = useMemo(() => posts.map((post) => post._id), [posts]);
+  const isAllSelected =
+    selectableIds.length > 0 && selectedPostIds.length === selectableIds.length;
+  const selectedCount = selectedPostIds.length;
+  const hasSelection = selectedCount > 0;
+
+  const toggleSelectPost = (id: string) => {
+    setSelectedPostIds((prev) =>
+      prev.includes(id) ? prev.filter((itemId) => itemId !== id) : [...prev, id]
+    );
+  };
+
+  const toggleSelectAll = () => {
+    if (isAllSelected) {
+      setSelectedPostIds([]);
+    } else {
+      setSelectedPostIds([...selectableIds]);
+    }
+  };
+
+  const clearSelection = () => setSelectedPostIds([]);
 
   const handleEditPost = (id: string) => {
     const postToEdit = posts.find((item) => item._id === id);
@@ -158,7 +200,6 @@ const Profile = () => {
       tags: nextValue,
     }));
 
-    // move caret to end on next tick so users can continue typing
     requestAnimationFrame(() => {
       event.currentTarget.selectionStart = event.currentTarget.selectionEnd =
         nextValue.length;
@@ -224,15 +265,34 @@ const Profile = () => {
     setPendingDeletePost(null);
   };
 
+  const openBulkDeleteModal = () => {
+    const postsToDelete = posts.filter((post) =>
+      selectedPostIds.includes(post._id)
+    );
+    if (!postsToDelete.length) {
+      return;
+    }
+    setPendingBulkDeletePosts(postsToDelete);
+  };
+
+  const closeBulkDeleteModal = () => {
+    setPendingBulkDeletePosts([]);
+  };
+
   const handleDeletePost = async (post: Post) => {
     try {
       setDeletingPostId(post._id);
       setError("");
       await deletePost(post._id);
       setPosts((prev) => prev.filter((item) => item._id !== post._id));
+      setSelectedPostIds((prev) => prev.filter((id) => id !== post._id));
       if (editingPostId === post._id) {
         handleCancelEdit();
       }
+      setUndoInfo({
+        posts: [post],
+        message: `Deleted "${post.title}"`,
+      });
       closeDeleteModal();
     } catch (apiError) {
       const message =
@@ -243,6 +303,70 @@ const Profile = () => {
     } finally {
       setDeletingPostId(null);
     }
+  };
+
+  const handleBulkDelete = async () => {
+    if (!pendingBulkDeletePosts.length) {
+      return;
+    }
+
+    const ids = pendingBulkDeletePosts.map((post) => post._id);
+
+    try {
+      setBulkDeleting(true);
+      setError("");
+      await bulkDeletePosts({ ids });
+      setPosts((prev) => prev.filter((item) => !ids.includes(item._id)));
+      setSelectedPostIds((prev) => prev.filter((id) => !ids.includes(id)));
+      setUndoInfo({
+        posts: pendingBulkDeletePosts,
+        message:
+          ids.length === 1
+            ? `Deleted "${pendingBulkDeletePosts[0].title}"`
+            : `${ids.length} posts deleted`,
+      });
+      closeBulkDeleteModal();
+    } catch (apiError) {
+      const message =
+        apiError instanceof Error
+          ? apiError.message
+          : "Failed to delete the selected posts";
+      setError(message);
+    } finally {
+      setBulkDeleting(false);
+    }
+  };
+
+  const handleUndoDelete = async () => {
+    if (!undoInfo || undoInfo.posts.length === 0) {
+      return;
+    }
+
+    const ids = undoInfo.posts.map((post) => post._id);
+
+    try {
+      setError("");
+      const response = await restorePosts({ ids });
+      const restoredPosts = response.posts ?? [];
+      setPosts((prev) => {
+        const existingIds = new Set(prev.map((item) => item._id));
+        const postsToAdd = (
+          restoredPosts.length ? restoredPosts : undoInfo.posts
+        ).filter((post) => !existingIds.has(post._id));
+        return [...prev, ...postsToAdd];
+      });
+      setUndoInfo(null);
+    } catch (apiError) {
+      const message =
+        apiError instanceof Error
+          ? apiError.message
+          : "Failed to restore posts";
+      setError(message);
+    }
+  };
+
+  const handleDismissUndo = () => {
+    setUndoInfo(null);
   };
 
   const sortedPosts = useMemo(
@@ -271,15 +395,42 @@ const Profile = () => {
   return (
     <div className="min-h-[calc(100vh-80px)] bg-gray-50 py-10">
       <div className="max-w-3xl mx-auto px-4">
-        <div className="bg-white border border-gray-200 rounded-xl p-6 mb-6">
-          <h1 className="text-3xl font-semibold text-gray-900">{userName}</h1>
-          <p className="text-sm text-gray-500 mt-1">{postsCountLabel}</p>
-          <button
-            onClick={handleCreatePost}
-            className="mt-4 inline-block bg-amber-500 hover:bg-amber-600 text-white px-5 py-2 rounded-lg text-sm font-medium"
-          >
-            Create New Post
-          </button>
+        <div className="bg-white border border-gray-200 rounded-xl p-6 mb-6 space-y-4">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h1 className="text-3xl font-semibold text-gray-900">
+                {userName}
+              </h1>
+              <p className="text-sm text-gray-500 mt-1">{postsCountLabel}</p>
+            </div>
+            <button
+              onClick={handleCreatePost}
+              className="inline-block bg-amber-500 hover:bg-amber-600 text-white px-5 py-2 rounded-lg text-sm font-medium"
+            >
+              Create New Post
+            </button>
+          </div>
+          <div className="flex flex-wrap items-center gap-3">
+            <label
+              htmlFor="status-filter"
+              className="text-sm font-semibold text-gray-700"
+            >
+              Status:
+            </label>
+            <select
+              id="status-filter"
+              value={statusFilter}
+              onChange={(event) =>
+                setStatusFilter(event.target.value as typeof statusFilter)
+              }
+              className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-800 focus:border-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-400/50"
+            >
+              <option value="all">All</option>
+              <option value="published">Published</option>
+              <option value="draft">Draft</option>
+              <option value="archived">Archived</option>
+            </select>
+          </div>
         </div>
 
         <div className="space-y-4">
@@ -295,227 +446,344 @@ const Profile = () => {
             </div>
           )}
 
+          {!loading && !error && posts.length > 0 && (
+            <div className="bg-white border border-gray-200 rounded-xl p-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <label className="flex items-center gap-2 text-sm text-gray-700">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 rounded border-gray-300 text-amber-500 focus:ring-amber-500"
+                  checked={isAllSelected}
+                  onChange={toggleSelectAll}
+                />
+                <span className="font-medium">Select all</span>
+                {hasSelection && (
+                  <span className="text-xs text-gray-500">
+                    {selectedCount} selected
+                  </span>
+                )}
+              </label>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={clearSelection}
+                  disabled={!hasSelection}
+                  className="border border-gray-300 text-gray-700 rounded-lg px-4 py-2 text-xs font-medium hover:bg-gray-50 disabled:opacity-60 disabled:cursor-not-allowed"
+                >
+                  Clear
+                </button>
+                <button
+                  type="button"
+                  onClick={openBulkDeleteModal}
+                  disabled={!hasSelection}
+                  className="border border-red-300 text-red-600 rounded-lg px-4 py-2 text-xs font-medium hover:bg-red-50 disabled:opacity-60 disabled:cursor-not-allowed"
+                >
+                  {hasSelection
+                    ? `Delete Selected (${selectedCount})`
+                    : "Delete Selected"}
+                </button>
+              </div>
+            </div>
+          )}
+
           {!loading &&
             !error &&
-            sortedPosts.map((post) => (
-              <div
-                key={post._id}
-                className="bg-white border border-gray-200 rounded-xl p-5"
-              >
-                <div className="flex flex-col gap-4">
-                  <button
-                    onClick={() => handleOpenPost(post._id)}
-                    className="w-full text-left"
-                  >
-                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                      <div>
-                        <h2 className="text-lg font-semibold text-gray-900">
-                          {post.title}
-                        </h2>
-                        <p className="text-xs text-gray-500">
-                          {new Date(post.createdAt).toLocaleDateString()}
-                        </p>
-                        <p className="text-xs text-gray-600 mt-2">
-                          {post.content}
-                        </p>
-                        <div className="flex flex-wrap gap-2 mt-2">
-                          {post.tags && post.tags.length > 0 ? (
-                            post.tags.map((tag) => (
-                              <span
-                                key={tag}
-                                className="text-[10px] px-2 py-1 bg-gray-100 text-gray-600 rounded-full"
-                              >
-                                {tag.trim()}
-                              </span>
-                            ))
-                          ) : (
-                            <span className="text-[10px] px-2 py-1 bg-gray-100 text-gray-400 rounded-full">
-                              No tags
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                      <span
-                        className={`text-xs font-semibold px-3 py-1 rounded-full ${statusBadgeClass(
-                          post.status
-                        )}`}
-                      >
-                        {readableStatus(post.status)}
-                      </span>
-                    </div>
-                  </button>
+            sortedPosts.map((post) => {
+              const isSelected = selectedPostIds.includes(post._id);
 
-                  <div className="flex flex-wrap gap-3">
-                    <button
-                      onClick={() => handleEditPost(post._id)}
-                      className="border border-gray-300 text-gray-700 rounded-lg px-4 py-2 text-xs font-medium hover:bg-gray-50"
-                    >
-                      Edit
-                    </button>
-                    <button
-                      onClick={() => openDeleteModal(post)}
-                      className="border border-red-300 text-red-600 rounded-lg px-4 py-2 text-xs font-medium hover:bg-red-50"
-                    >
-                      Delete
-                    </button>
-                    {pendingDeletePost && (
-                      <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
-                        <div className="max-w-md w-full rounded-2xl bg-white shadow-xl p-6 space-y-4">
-                          <div className="flex items-start gap-3">
-                            <div className="space-y-1">
-                              <h3 className="text-lg font-semibold text-gray-900">
-                                Delete post?
-                              </h3>
-                              <p className="text-sm text-gray-600">
-                                This will permanently remove&nbsp;
-                                <span className="font-medium text-gray-900">
-                                  {pendingDeletePost.title}
+              return (
+                <div
+                  key={post._id}
+                  className="bg-white border border-gray-200 rounded-xl p-5"
+                >
+                  <div className="flex gap-4">
+                    <div className="pt-1">
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4 rounded border-gray-300 text-amber-500 focus:ring-amber-500"
+                        checked={isSelected}
+                        onChange={() => toggleSelectPost(post._id)}
+                      />
+                    </div>
+                    <div className="flex-1 flex flex-col gap-4">
+                      <button
+                        onClick={() => handleOpenPost(post._id)}
+                        className="w-full text-left"
+                      >
+                        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                          <div>
+                            <h2 className="text-lg font-semibold text-gray-900">
+                              {post.title}
+                            </h2>
+                            <p className="text-xs text-gray-500">
+                              {new Date(post.createdAt).toLocaleDateString()}
+                            </p>
+                            <p className="text-xs text-gray-600 mt-2">
+                              {post.content}
+                            </p>
+                            <div className="flex flex-wrap gap-2 mt-2">
+                              {post.tags && post.tags.length > 0 ? (
+                                post.tags.map((tag) => (
+                                  <span
+                                    key={tag}
+                                    className="text-[10px] px-2 py-1 bg-gray-100 text-gray-600 rounded-full"
+                                  >
+                                    {tag.trim()}
+                                  </span>
+                                ))
+                              ) : (
+                                <span className="text-[10px] px-2 py-1 bg-gray-100 text-gray-400 rounded-full">
+                                  No tags
                                 </span>
-                                . You can’t undo this action.
-                              </p>
+                              )}
                             </div>
                           </div>
-                          <div className="bg-gray-50 -mx-6 px-6 py-4 rounded-b-2xl flex flex-col gap-3 sm:flex-row sm:justify-end sm:items-center">
+                          <span
+                            className={`text-xs font-semibold px-3 py-1 rounded-full ${statusBadgeClass(
+                              post.status
+                            )}`}
+                          >
+                            {readableStatus(post.status)}
+                          </span>
+                        </div>
+                      </button>
+
+                      <div className="flex flex-wrap gap-3">
+                        <button
+                          onClick={() => handleEditPost(post._id)}
+                          className="border border-gray-300 text-gray-700 rounded-lg px-4 py-2 text-xs font-medium hover:bg-gray-50"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          onClick={() => openDeleteModal(post)}
+                          className="border border-red-300 text-red-600 rounded-lg px-4 py-2 text-xs font-medium hover:bg-red-50"
+                        >
+                          Delete
+                        </button>
+                      </div>
+
+                      {editingPostId === post._id && (
+                        <form
+                          onSubmit={(event) =>
+                            handleUpdatePost(event, post._id)
+                          }
+                          className="border border-gray-200 rounded-lg p-4 space-y-3 bg-gray-50"
+                        >
+                          <div>
+                            <label
+                              className="block text-xs font-medium text-gray-700 mb-1"
+                              htmlFor={`title-${post._id}`}
+                            >
+                              Title
+                            </label>
+                            <input
+                              id={`title-${post._id}`}
+                              type="text"
+                              value={editForm.title}
+                              onChange={(event) =>
+                                setEditForm((prev) => ({
+                                  ...prev,
+                                  title: event.target.value,
+                                }))
+                              }
+                              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                            />
+                          </div>
+                          <div>
+                            <label
+                              className="block text-xs font-medium text-gray-700 mb-1"
+                              htmlFor={`status-${post._id}`}
+                            >
+                              Status
+                            </label>
+                            <select
+                              id={`status-${post._id}`}
+                              value={editForm.status}
+                              onChange={(event) =>
+                                setEditForm((prev) => ({
+                                  ...prev,
+                                  status: event.target.value as Post["status"],
+                                }))
+                              }
+                              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                            >
+                              <option value="published">Published</option>
+                              <option value="draft">Draft</option>
+                              <option value="archived">Archived</option>
+                            </select>
+                          </div>
+                          <div>
+                            <label
+                              className="block text-xs font-medium text-gray-700 mb-1"
+                              htmlFor={`content-${post._id}`}
+                            >
+                              Content
+                            </label>
+                            <textarea
+                              id={`content-${post._id}`}
+                              value={editForm.content}
+                              onChange={(event) =>
+                                setEditForm((prev) => ({
+                                  ...prev,
+                                  content: event.target.value,
+                                }))
+                              }
+                              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                              rows={4}
+                            />
+                          </div>
+                          <div>
+                            <label
+                              className="block text-xs font-medium text-gray-700 mb-1"
+                              htmlFor={`tags-${post._id}`}
+                            >
+                              Tags (comma separated)
+                            </label>
+                            <input
+                              id={`tags-${post._id}`}
+                              type="text"
+                              value={editForm.tags}
+                              onChange={(event) =>
+                                setEditForm((prev) => ({
+                                  ...prev,
+                                  tags: event.target.value,
+                                }))
+                              }
+                              onKeyDown={handleTagKeyDown}
+                              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                            />
+                          </div>
+                          <div className="flex gap-2">
+                            <button
+                              type="submit"
+                              disabled={savingPostId === post._id}
+                              className="bg-amber-500 hover:bg-amber-600 text-white rounded-lg px-4 py-2 text-xs font-medium"
+                            >
+                              {savingPostId === post._id
+                                ? "Saving..."
+                                : "Save Changes"}
+                            </button>
                             <button
                               type="button"
-                              onClick={closeDeleteModal}
-                              className="w-full sm:w-auto border border-gray-300 text-gray-700 rounded-lg px-4 py-2 text-sm font-medium hover:bg-gray-100 transition"
+                              onClick={handleCancelEdit}
+                              disabled={savingPostId === post._id}
+                              className="border border-gray-300 text-gray-700 rounded-lg px-4 py-2 text-xs font-medium"
                             >
                               Cancel
                             </button>
-                            <button
-                              type="button"
-                              onClick={() =>
-                                handleDeletePost(pendingDeletePost)
-                              }
-                              disabled={
-                                deletingPostId === pendingDeletePost._id
-                              }
-                              className="w-full sm:w-auto bg-red-500 hover:bg-red-600 text-white rounded-lg px-4 py-2 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-70"
-                            >
-                              {deletingPostId === pendingDeletePost._id
-                                ? "Deleting..."
-                                : "Delete"}
-                            </button>
                           </div>
-                        </div>
-                      </div>
-                    )}
+                        </form>
+                      )}
+                    </div>
                   </div>
+                </div>
+              );
+            })}
 
-                  {editingPostId === post._id && (
-                    <form
-                      onSubmit={(event) => handleUpdatePost(event, post._id)}
-                      className="border border-gray-200 rounded-lg p-4 space-y-3 bg-gray-50"
-                    >
-                      <div>
-                        <label
-                          className="block text-xs font-medium text-gray-700 mb-1"
-                          htmlFor={`title-${post._id}`}
-                        >
-                          Title
-                        </label>
-                        <input
-                          id={`title-${post._id}`}
-                          type="text"
-                          value={editForm.title}
-                          onChange={(event) =>
-                            setEditForm((prev) => ({
-                              ...prev,
-                              title: event.target.value,
-                            }))
-                          }
-                          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
-                        />
-                      </div>
-                      <div>
-                        <label
-                          className="block text-xs font-medium text-gray-700 mb-1"
-                          htmlFor={`status-${post._id}`}
-                        >
-                          Status
-                        </label>
-                        <select
-                          id={`status-${post._id}`}
-                          value={editForm.status}
-                          onChange={(event) =>
-                            setEditForm((prev) => ({
-                              ...prev,
-                              status: event.target.value as Post["status"],
-                            }))
-                          }
-                          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
-                        >
-                          <option value="published">Published</option>
-                          <option value="draft">Draft</option>
-                          <option value="archived">Archived</option>
-                        </select>
-                      </div>
-                      <div>
-                        <label
-                          className="block text-xs font-medium text-gray-700 mb-1"
-                          htmlFor={`content-${post._id}`}
-                        >
-                          Content
-                        </label>
-                        <textarea
-                          id={`content-${post._id}`}
-                          value={editForm.content}
-                          onChange={(event) =>
-                            setEditForm((prev) => ({
-                              ...prev,
-                              content: event.target.value,
-                            }))
-                          }
-                          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
-                          rows={4}
-                        />
-                      </div>
-                      <div>
-                        <label
-                          className="block text-xs font-medium text-gray-700 mb-1"
-                          htmlFor={`tags-${post._id}`}
-                        >
-                          Tags (comma separated)
-                        </label>
-                        <input
-                          id={`tags-${post._id}`}
-                          type="text"
-                          value={editForm.tags}
-                          onChange={(event) =>
-                            setEditForm((prev) => ({
-                              ...prev,
-                              tags: event.target.value,
-                            }))
-                          }
-                          onKeyDown={handleTagKeyDown}
-                          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
-                        />
-                      </div>
-                      <div className="flex gap-2">
-                        <button
-                          type="submit"
-                          disabled={savingPostId === post._id}
-                          className="bg-amber-500 hover:bg-amber-600 text-white rounded-lg px-4 py-2 text-xs font-medium"
-                        >
-                          {savingPostId === post._id
-                            ? "Saving..."
-                            : "Save Changes"}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={handleCancelEdit}
-                          disabled={savingPostId === post._id}
-                          className="border border-gray-300 text-gray-700 rounded-lg px-4 py-2 text-xs font-medium"
-                        >
-                          Cancel
-                        </button>
-                      </div>
-                    </form>
-                  )}
+          {pendingDeletePost && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
+              <div className="max-w-md w-full rounded-2xl bg-white shadow-xl p-6 space-y-4">
+                <div className="space-y-1">
+                  <h3 className="text-lg font-semibold text-gray-900">
+                    Delete post?
+                  </h3>
+                  <p className="text-sm text-gray-600">
+                    This moves{" "}
+                    <span className="font-medium text-gray-900">
+                      {pendingDeletePost.title}
+                    </span>{" "}
+                    to the trash. You can undo the deletion using the banner
+                    that appears afterward.
+                  </p>
+                </div>
+                <div className="bg-gray-50 -mx-6 px-6 py-4 rounded-b-2xl flex flex-col gap-3 sm:flex-row sm:justify-end sm:items-center">
+                  <button
+                    type="button"
+                    onClick={closeDeleteModal}
+                    className="w-full sm:w-auto border border-gray-300 text-gray-700 rounded-lg px-4 py-2 text-sm font-medium hover:bg-gray-100 transition"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleDeletePost(pendingDeletePost)}
+                    disabled={deletingPostId === pendingDeletePost._id}
+                    className="w-full sm:w-auto bg-red-500 hover:bg-red-600 text-white rounded-lg px-4 py-2 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-70"
+                  >
+                    {deletingPostId === pendingDeletePost._id
+                      ? "Deleting..."
+                      : "Delete"}
+                  </button>
                 </div>
               </div>
-            ))}
+            </div>
+          )}
+
+          {pendingBulkDeletePosts.length > 0 && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
+              <div className="max-w-md w-full rounded-2xl bg-white shadow-xl p-6 space-y-4">
+                <div className="space-y-2">
+                  <h3 className="text-lg font-semibold text-gray-900">
+                    Delete selected posts?
+                  </h3>
+                  <p className="text-sm text-gray-600">
+                    You are about to delete {pendingBulkDeletePosts.length}{" "}
+                    {pendingBulkDeletePosts.length === 1 ? "post" : "posts"}.
+                    You can undo the deletion right after confirming.
+                  </p>
+                  <ul className="text-xs text-gray-500 space-y-1">
+                    {pendingBulkDeletePosts.slice(0, 3).map((post) => (
+                      <li key={post._id}>• {post.title}</li>
+                    ))}
+                    {pendingBulkDeletePosts.length > 3 && (
+                      <li className="italic">
+                        + {pendingBulkDeletePosts.length - 3} more
+                      </li>
+                    )}
+                  </ul>
+                </div>
+                <div className="bg-gray-50 -mx-6 px-6 py-4 rounded-b-2xl flex flex-col gap-3 sm:flex-row sm:justify-end sm:items-center">
+                  <button
+                    type="button"
+                    onClick={closeBulkDeleteModal}
+                    className="w-full sm:w-auto border border-gray-300 text-gray-700 rounded-lg px-4 py-2 text-sm font-medium hover:bg-gray-100 transition"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleBulkDelete}
+                    disabled={bulkDeleting}
+                    className="w-full sm:w-auto bg-red-500 hover:bg-red-600 text-white rounded-lg px-4 py-2 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-70"
+                  >
+                    {bulkDeleting ? "Deleting..." : "Delete selected"}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {undoInfo && (
+            <div className="fixed bottom-6 left-1/2 z-40 flex w-[calc(100%-2rem)] max-w-xl -translate-x-1/2 items-center justify-between gap-3 rounded-xl bg-gray-900 text-white px-4 py-3 shadow-lg">
+              <span className="text-sm font-medium">{undoInfo.message}</span>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={handleUndoDelete}
+                  className="rounded-lg bg-white/10 px-3 py-1 text-sm font-semibold hover:bg-white/20 transition"
+                >
+                  Undo
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDismissUndo}
+                  className="rounded-lg bg-white/0 px-3 py-1 text-sm hover:bg-white/10 transition"
+                >
+                  Dismiss
+                </button>
+              </div>
+            </div>
+          )}
 
           {!loading && !error && posts.length === 0 && (
             <div className="bg-white border border-gray-200 rounded-xl p-8 text-center text-gray-500 text-sm">

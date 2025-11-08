@@ -61,6 +61,8 @@ const getPosts = async (req, res) => {
             filters.author = author;
         }
 
+        filters.deletedAt = null;
+
         const posts = await Post.find(filters)
             .populate("author", "name email")
             .sort({ createdAt: -1 });
@@ -83,7 +85,7 @@ const getPostById = async (req, res) => {
             return res.status(400).json({ message: "invalid post id" });
         }
 
-        const post = await Post.findById(id).populate("author", "name email");
+        const post = await Post.findOne({ _id: id, deletedAt: null }).populate("author", "name email");
 
         if (!post) {
             return res.status(404).json({ message: "Post not found" });
@@ -120,6 +122,10 @@ const updatePost = async (req, res) => {
 
         if (post.author.toString() !== req.user.id) {
             return res.status(403).json({ message: "Forbidden" });
+        }
+
+        if (post.deletedAt) {
+            return res.status(400).json({ message: "Post has been deleted" });
         }
 
         const updates = {};
@@ -192,10 +198,16 @@ const deletePost = async (req, res) => {
             return res.status(403).json({ message: "Forbidden" });
         }
 
-        await post.deleteOne();
+        if (post.deletedAt) {
+            return res.status(400).json({ message: "Post already deleted" });
+        }
+
+        post.deletedAt = new Date();
+        await post.save();
 
         return res.status(200).json({
             message: "Post deleted successfully",
+            postId: id,
         });
     } catch (error) {
         console.error("Failed to delete post", error);
@@ -203,6 +215,96 @@ const deletePost = async (req, res) => {
     }
 };
 
-module.exports = { createPost, getPosts, getPostById, updatePost, deletePost };
+const bulkDeletePosts = async (req, res) => {
+    try {
+        const { ids } = req.body;
+
+        if (!Array.isArray(ids) || ids.length === 0) {
+            return res.status(400).json({ message: "ids array is required" });
+        }
+
+        if (!req.user || !req.user.id) {
+            return res.status(401).json({ message: "Unauthorized" });
+        }
+
+        const invalidId = ids.find((id) => !mongoose.Types.ObjectId.isValid(id));
+        if (invalidId) {
+            return res.status(400).json({ message: `invalid post id: ${invalidId}` });
+        }
+
+        const posts = await Post.find({
+            _id: { $in: ids },
+            author: req.user.id,
+            deletedAt: null,
+        });
+
+        if (posts.length === 0) {
+            return res.status(404).json({ message: "No posts found to delete" });
+        }
+
+        const now = new Date();
+        await Post.updateMany(
+            { _id: { $in: posts.map((post) => post._id) } },
+            { $set: { deletedAt: now } }
+        );
+
+        return res.status(200).json({
+            message: "Posts deleted successfully",
+            deletedIds: posts.map((post) => post._id.toString()),
+        });
+    } catch (error) {
+        console.error("Failed to bulk delete posts", error);
+        return res.status(500).json({ message: "Something went wrong" });
+    }
+};
+
+const restorePosts = async (req, res) => {
+    try {
+        const { ids } = req.body;
+
+        if (!Array.isArray(ids) || ids.length === 0) {
+            return res.status(400).json({ message: "ids array is required" });
+        }
+
+        if (!req.user || !req.user.id) {
+            return res.status(401).json({ message: "Unauthorized" });
+        }
+
+        const invalidId = ids.find((id) => !mongoose.Types.ObjectId.isValid(id));
+        if (invalidId) {
+            return res.status(400).json({ message: `invalid post id: ${invalidId}` });
+        }
+
+        const posts = await Post.find({
+            _id: { $in: ids },
+            author: req.user.id,
+            deletedAt: { $ne: null },
+        });
+
+        if (posts.length === 0) {
+            return res.status(404).json({ message: "No posts found to restore" });
+        }
+
+        await Post.updateMany(
+            { _id: { $in: posts.map((post) => post._id) } },
+            { $set: { deletedAt: null } }
+        );
+
+        const restoredPosts = await Post.find({
+            _id: { $in: posts.map((post) => post._id) },
+        }).populate("author", "name email");
+
+        return res.status(200).json({
+            message: "Posts restored successfully",
+            restoredIds: posts.map((post) => post._id.toString()),
+            posts: restoredPosts,
+        });
+    } catch (error) {
+        console.error("Failed to restore posts", error);
+        return res.status(500).json({ message: "Something went wrong" });
+    }
+};
+
+module.exports = { createPost, getPosts, getPostById, updatePost, deletePost, bulkDeletePosts, restorePosts };
 
 

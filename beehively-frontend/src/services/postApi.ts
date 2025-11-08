@@ -6,6 +6,7 @@ export type Post = {
     content: string
     status: 'draft' | 'published' | 'archived'
     tags: string[]
+    deletedAt?: string | null
     author:
     | {
         _id?: string
@@ -49,11 +50,31 @@ type UpdatePostResponse = {
 
 type DeletePostResponse = {
     message: string
+    postId?: string
 }
 
 type GetPostResponse = {
     message: string
     post: Post
+}
+
+type BulkDeletePayload = {
+    ids: string[]
+}
+
+type BulkDeleteResponse = {
+    message: string
+    deletedIds: string[]
+}
+
+type RestorePostsPayload = {
+    ids: string[]
+}
+
+type RestorePostsResponse = {
+    message: string
+    restoredIds: string[]
+    posts: Post[]
 }
 
 export const createPost = async (payload: CreatePostPayload) => {
@@ -95,6 +116,24 @@ export const deletePost = async (id: string) => {
 export const getPostById = async (id: string) => {
     try {
         const { data } = await apiClient.get<GetPostResponse>(`/posts/get-post/${id}`)
+        return data
+    } catch (error) {
+        throw new Error(extractAxiosErrorMessage(error))
+    }
+}
+
+export const bulkDeletePosts = async (payload: BulkDeletePayload) => {
+    try {
+        const { data } = await apiClient.post<BulkDeleteResponse>('/posts/bulk-delete', payload)
+        return data
+    } catch (error) {
+        throw new Error(extractAxiosErrorMessage(error))
+    }
+}
+
+export const restorePosts = async (payload: RestorePostsPayload) => {
+    try {
+        const { data } = await apiClient.post<RestorePostsResponse>('/posts/restore-posts', payload)
         return data
     } catch (error) {
         throw new Error(extractAxiosErrorMessage(error))

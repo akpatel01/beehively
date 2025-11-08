@@ -106,7 +106,6 @@ const ContentDetail = () => {
   return (
     <div className="min-h-[calc(100vh-80px)] py-8 px-4">
       <div className="max-w-4xl mx-auto">
-        {/* Back button */}
         <button
           onClick={handleBack}
           className="flex items-center gap-2 text-gray-600 hover:text-gray-900 mb-6 transition-colors group"

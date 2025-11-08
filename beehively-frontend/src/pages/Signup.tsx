@@ -4,84 +4,117 @@ import { signup as signupRequest } from "../services/authApi";
 import hideIcon from "../assets/hide.png";
 import showIcon from "../assets/show.png";
 
-const validateField = (name: string, value: string) => {
-  let error = "";
-  switch (name) {
-    case "name":
-      if (!value) {
-        error = "Name is required";
-      }
-      break;
-    case "email":
-      if (!value) {
-        error = "Email is required";
-      }
-      break;
-    case "password":
-      if (!value) {
-        error = "Password is required";
-      }
-      break;
-    case "confirm":
-      if (!value) {
-        error = "Confirm password is required";
-      }
-      break;
-    default:
-      break;
+type FormValues = {
+  name: string;
+  email: string;
+  password: string;
+  confirm: string;
+};
+
+type FieldErrors = Record<keyof FormValues, string>;
+
+const initialValues: FormValues = {
+  name: "",
+  email: "",
+  password: "",
+  confirm: "",
+};
+
+const initialFieldErrors: FieldErrors = {
+  name: "",
+  email: "",
+  password: "",
+  confirm: "",
+};
+
+const validateField = (name: keyof FormValues, value: string) => {
+  if (!value) {
+    if (name === "confirm") {
+      return "Confirm password is required";
+    }
+    return `${name.charAt(0).toUpperCase() + name.slice(1)} is required`;
   }
-  return error;
+  return "";
+};
+
+const validatePasswordsMatch = (password: string, confirm: string) => {
+  if (!password || !confirm) {
+    return "";
+  }
+  return password === confirm ? "" : "Passwords do not match";
 };
 
 const Signup = () => {
   const navigate = useNavigate();
-  const [formValues, setFormValues] = useState({
-    name: "",
-    email: "",
-    password: "",
-    confirm: "",
-  });
+  const [formValues, setFormValues] = useState<FormValues>(initialValues);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [fieldErrors, setFieldErrors] = useState({
-    name: "",
-    email: "",
-    password: "",
-    confirm: "",
-  });
+  const [fieldErrors, setFieldErrors] =
+    useState<FieldErrors>(initialFieldErrors);
 
-  const signupData = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value } = e.target;
-    setFormValues((prev) => ({
-      ...prev,
-      [name]: value,
-    }));
+  const signupData = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = event.target;
+    const key = name as keyof FormValues;
+
+    setFormValues((prev) => {
+      const nextValues: FormValues = { ...prev, [key]: value };
+
+      setFieldErrors((prevErrors) => {
+        const nextErrors: FieldErrors = { ...prevErrors };
+        nextErrors[key] = validateField(key, value);
+
+        if (key === "password" || key === "confirm") {
+          const mismatchError = validatePasswordsMatch(
+            nextValues.password,
+            nextValues.confirm
+          );
+
+          if (mismatchError) {
+            nextErrors.password = mismatchError;
+            nextErrors.confirm = mismatchError;
+          } else {
+            nextErrors.password = validateField(
+              "password",
+              nextValues.password
+            );
+            nextErrors.confirm = validateField("confirm", nextValues.confirm);
+          }
+        }
+
+        return nextErrors;
+      });
+
+      return nextValues;
+    });
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
-    setFieldErrors({
-      name: "",
-      email: "",
-      password: "",
-      confirm: "",
-    });
+    const nextErrors: FieldErrors = {
+      name: validateField("name", formValues.name),
+      email: validateField("email", formValues.email),
+      password: validateField("password", formValues.password),
+      confirm: validateField("confirm", formValues.confirm),
+    };
 
-    Object.keys(formValues).forEach((key) => {
-      const error = validateField(
-        key,
-        formValues[key as keyof typeof formValues]
-      );
-      setFieldErrors((prev) => ({
-        ...prev,
-        [key]: error,
-      }));
-    });
+    const mismatchError = validatePasswordsMatch(
+      formValues.password,
+      formValues.confirm
+    );
 
-    if (Object.values(fieldErrors).some(Boolean)) {
+    if (mismatchError) {
+      nextErrors.password = mismatchError;
+      nextErrors.confirm = mismatchError;
+    }
+
+    setFieldErrors(nextErrors);
+
+    const hasErrors = Object.values(nextErrors).some(Boolean);
+
+    if (hasErrors) {
       return;
     }
 
@@ -93,7 +126,17 @@ const Signup = () => {
         email: formValues.email,
         password: formValues.password,
       });
+
+      localStorage.removeItem("token");
+      localStorage.removeItem("user");
+      sessionStorage.removeItem("token");
+      sessionStorage.removeItem("user");
+
       localStorage.setItem("token", data.token);
+      if (data.user) {
+        localStorage.setItem("user", JSON.stringify(data.user));
+      }
+
       navigate("/");
     } catch (err) {
       const message = err instanceof Error ? err.message : "Signup failed";
@@ -107,7 +150,6 @@ const Signup = () => {
     <div className="min-h-[calc(100vh-80px)] flex items-center justify-center px-4 py-12">
       <div className="w-full max-w-md">
         <div className="rounded-3xl bg-white/90 backdrop-blur-xl p-6 sm:p-8 md:p-10 shadow-2xl border border-gray-200">
-          {/* Header */}
           <div className="mb-8 text-center">
             <h2 className="text-2xl sm:text-3xl font-bold mb-2 bg-gradient-to-r from-pink-600 to-orange-600 bg-clip-text text-transparent">
               Create account
@@ -119,7 +161,6 @@ const Signup = () => {
 
           {/* Form */}
           <form onSubmit={handleSubmit} className="space-y-5">
-            {/* Name field */}
             <div className="space-y-2">
               <label
                 htmlFor="name"
@@ -141,7 +182,6 @@ const Signup = () => {
               )}
             </div>
 
-            {/* Email field */}
             <div className="space-y-2">
               <label
                 htmlFor="email"
@@ -165,7 +205,6 @@ const Signup = () => {
               )}
             </div>
 
-            {/* Password field */}
             <div className="space-y-2">
               <label
                 htmlFor="password"
@@ -203,7 +242,6 @@ const Signup = () => {
               )}
             </div>
 
-            {/* Confirm password field */}
             <div className="space-y-2">
               <label
                 htmlFor="confirm"
@@ -244,7 +282,6 @@ const Signup = () => {
               <p className="text-sm text-red-500 text-center">{error}</p>
             )}
 
-            {/* Submit button */}
             <button
               type="submit"
               disabled={loading}
@@ -254,7 +291,6 @@ const Signup = () => {
               {loading ? "Creating account..." : "Create account"}
             </button>
 
-            {/* Divider */}
             <div className="relative my-6">
               <div className="absolute inset-0 flex items-center">
                 <div className="w-full border-t border-gray-300"></div>
@@ -266,7 +302,6 @@ const Signup = () => {
               </div>
             </div>
 
-            {/* Sign in link */}
             <p className="text-center text-sm text-gray-600 mt-6">
               Already have an account?{" "}
               <button
