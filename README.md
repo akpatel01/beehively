@@ -15,7 +15,7 @@ cd beehively-backend
 npm install
 npm run dev
 
-# Frontend (in new terminal)
+# Frontend
 cd beehively-frontend
 npm install
 npm run dev
