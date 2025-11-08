@@ -22,3 +22,11 @@ npm run dev
 ```
 
 Backend runs on `http://localhost:3000/api`. Frontend runs on `http://localhost:5173`.
+
+## Feature Overview
+
+- Authentication (signup/login) with JWT-protected authoring routes.
+- Publish, edit, soft-delete, and restore posts with tag management.
+- Home feed with search, sorting, and quick navigation into detailed post views.
+- Public author profiles that list all of a user’s published posts.
+- Authenticated profile dashboard for managing your own drafts and published content.

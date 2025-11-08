@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { getUserProfile, type PublicUser } from "../services/userApi";
 import type { Post } from "../services/postApi";
@@ -12,53 +12,35 @@ const UserProfile = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  useEffect(() => {
-    let isMounted = true;
+  const loadProfile = useCallback(async () => {
+    if (!id) {
+      setError("Invalid user id");
+      setLoading(false);
+      return;
+    }
 
-    const loadProfile = async () => {
-      if (!id) {
-        if (isMounted) {
-          setError("Invalid user id");
-          setLoading(false);
-        }
-        return;
-      }
-
-      try {
-        if (isMounted) {
-          setLoading(true);
-          setError("");
-        }
-        const response = await getUserProfile(id);
-        if (!isMounted) {
-          return;
-        }
-        setUser(response.user);
-        setPosts(response.posts ?? []);
-      } catch (apiError) {
-        if (!isMounted) {
-          return;
-        }
-        const message =
-          apiError instanceof Error
-            ? apiError.message
-            : "Failed to load user profile";
-        setError(message);
-        setUser(null);
-        setPosts([]);
-      } finally {
-        if (isMounted) {
-          setLoading(false);
-        }
-      }
-    };
-
-    loadProfile();
-
-    return () => {
-      isMounted = false;
-    };
+    try {
+      setLoading(true);
+      setError("");
+      const response = await getUserProfile(id);
+      setUser(response.user);
+      setPosts(response.posts ?? []);
+    } catch (apiError) {
+      const message =
+        apiError instanceof Error
+          ? apiError.message
+          : "Failed to load user profile";
+      setError(message);
+      setUser(null);
+      setPosts([]);
+    } finally {
+      setLoading(false);
+    }
   }, [id]);
+
+  useEffect(() => {
+    loadProfile();
+  }, [loadProfile]);
 
   const postCountLabel = useMemo(() => {
     if (loading) {

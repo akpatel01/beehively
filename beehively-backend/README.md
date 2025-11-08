@@ -45,7 +45,10 @@ The server listens on `http://localhost:3000`. All routes are prefixed with `/ap
 - `GET /api/posts/get-post/:id` – single post
 - `POST /api/posts/create-post` – create (requires `Authorization: Bearer <token>`)
 - `PUT /api/posts/update-post/:id` – update own post
-- `DELETE /api/posts/delete-post/:id` – delete own post
+- `DELETE /api/posts/delete-post/:id` – soft delete own post
+- `POST /api/posts/bulk-delete` – soft delete multiple posts by id
+- `POST /api/posts/restore-posts` – restore soft-deleted posts
+- `GET /api/users/:id` – public profile with author info and published posts
 
 ## Development Notes
 
