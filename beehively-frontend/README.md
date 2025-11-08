@@ -21,7 +21,7 @@ npm install
 npm run dev
 ```
 
-The dev server runs on `http://localhost:5173`. The app expects the backend at `http://localhost:3000/api` unless `API_URL` is set.
+The dev server runs on `http://localhost:5173`.
 
 ## Core Features
 
