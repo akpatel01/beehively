@@ -11,12 +11,6 @@ const Layout = () => {
   const isActive = (path: string) => location.pathname === path;
 
   useEffect(() => {
-    const updateToken = () => {
-      setToken(
-        localStorage.getItem("token") || sessionStorage.getItem("token")
-      );
-    };
-
     updateToken();
     window.addEventListener("storage", updateToken);
 
@@ -24,6 +18,10 @@ const Layout = () => {
       window.removeEventListener("storage", updateToken);
     };
   }, []);
+
+  const updateToken = () => {
+    setToken(localStorage.getItem("token") || sessionStorage.getItem("token"));
+  };
 
   useEffect(() => {
     setToken(localStorage.getItem("token") || sessionStorage.getItem("token"));
