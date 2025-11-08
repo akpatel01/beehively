@@ -128,7 +128,6 @@ const UserProfile = () => {
                   <h1 className="text-3xl font-semibold text-gray-900">
                     {user.name}
                   </h1>
-                  <p className="text-sm text-gray-500">{user.email}</p>
                 </div>
               </div>
               <p className="text-sm text-gray-500 mt-4">{postCountLabel}</p>
