@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import type { MouseEvent } from "react";
 import { listPosts, type Post } from "../services/postApi";
 
 type SortOption = "newest" | "oldest" | "title";
@@ -16,6 +17,14 @@ const getAuthorName = (author: Post["author"]) => {
   return author.name || "Unknown author";
 };
 
+const getAuthorId = (author: Post["author"]) => {
+  if (!author || typeof author === "string") {
+    return undefined;
+  }
+
+  return author._id;
+};
+
 const Home = () => {
   const navigate = useNavigate();
   const [sortBy, setSortBy] = useState<SortOption>("newest");
@@ -23,6 +32,17 @@ const Home = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
+
+  const handleAuthorClick = (
+    event: MouseEvent<HTMLButtonElement>,
+    authorId?: string
+  ) => {
+    event.stopPropagation();
+    if (!authorId) {
+      return;
+    }
+    navigate(`/users/${authorId}`);
+  };
 
   useEffect(() => {
     fetchPosts();
@@ -170,60 +190,69 @@ const Home = () => {
             )}
             {!loading &&
               !error &&
-              sortedPosts.map((item) => (
-                <div
-                  key={item._id}
-                  onClick={() => navigate(`/content/${item._id}`)}
-                  className="group bg-white rounded-2xl border border-gray-200 p-6 hover:shadow-2xl hover:shadow-amber-500/10 transition-all duration-300 hover:scale-[1.02] cursor-pointer flex flex-col"
-                >
-                  <h3 className="text-xl font-bold text-gray-900 mb-3 line-clamp-2 group-hover:text-amber-600 transition-colors">
-                    {item.title}
-                  </h3>
+              sortedPosts.map((item) => {
+                const authorId = getAuthorId(item.author);
 
-                  <p className="text-gray-600 text-sm leading-relaxed line-clamp-2 mb-6 flex-grow">
-                    {item.content}
-                  </p>
+                return (
+                  <div
+                    key={item._id}
+                    onClick={() => navigate(`/content/${item._id}`)}
+                    className="group bg-white rounded-2xl border border-gray-200 p-6 hover:shadow-2xl hover:shadow-amber-500/10 transition-all duration-300 hover:scale-[1.02] cursor-pointer flex flex-col"
+                  >
+                    <h3 className="text-xl font-bold text-gray-900 mb-3 line-clamp-2 group-hover:text-amber-600 transition-colors">
+                      {item.title}
+                    </h3>
 
-                  <div className="flex items-center justify-between text-xs text-gray-500 pt-4 border-t border-gray-100">
-                    <div className="flex items-center gap-1.5">
-                      <svg
-                        className="w-4 h-4 text-gray-400"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        stroke="currentColor"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
-                        />
-                      </svg>
-                      <span className="font-medium text-gray-700">
-                        {getAuthorName(item.author)}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-1.5">
-                      <svg
-                        className="w-4 h-4 text-gray-400"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        stroke="currentColor"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
-                        />
-                      </svg>
-                      <span>
-                        {new Date(item.createdAt).toLocaleDateString()}
-                      </span>
+                    <p className="text-gray-600 text-sm leading-relaxed line-clamp-2 mb-6 flex-grow">
+                      {item.content}
+                    </p>
+
+                    <div className="flex items-center justify-between text-xs text-gray-500 pt-4 border-t border-gray-100">
+                      <div className="flex items-center gap-1.5">
+                        <svg
+                          className="w-4 h-4 text-gray-400"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          stroke="currentColor"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
+                          />
+                        </svg>
+                        <button
+                          type="button"
+                          onClick={(event) => handleAuthorClick(event, authorId)}
+                          className="font-medium text-gray-700 hover:text-amber-600 focus:outline-none disabled:cursor-default disabled:text-gray-400"
+                          disabled={!authorId}
+                        >
+                          {getAuthorName(item.author)}
+                        </button>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <svg
+                          className="w-4 h-4 text-gray-400"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          stroke="currentColor"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+                          />
+                        </svg>
+                        <span>
+                          {new Date(item.createdAt).toLocaleDateString()}
+                        </span>
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
           </div>
         </div>
       </div>

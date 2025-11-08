@@ -47,6 +47,13 @@ const ContentDetail = () => {
     return content.author.name || content.author.email || "Unknown Author";
   }, [content?.author]);
 
+  const authorId = useMemo(() => {
+    if (!content?.author || typeof content.author === "string") {
+      return undefined;
+    }
+    return content.author._id;
+  }, [content?.author]);
+
   const authorInitials = useMemo(() => {
     const name = authorName;
     return name
@@ -70,6 +77,13 @@ const ContentDetail = () => {
 
   const handleGoHome = () => {
     navigate("/");
+  };
+
+  const handleAuthorClick = () => {
+    if (!authorId) {
+      return;
+    }
+    navigate(`/users/${authorId}`);
   };
 
   if (loading) {
@@ -152,7 +166,14 @@ const ContentDetail = () => {
                   {authorInitials}
                 </div>
                 <div>
-                  <p className="font-semibold text-gray-900">{authorName}</p>
+                  <button
+                    type="button"
+                    onClick={handleAuthorClick}
+                    disabled={!authorId}
+                    className="font-semibold text-gray-900 hover:text-amber-600 focus:outline-none disabled:cursor-default disabled:text-gray-400"
+                  >
+                    {authorName}
+                  </button>
                   <p className="text-xs text-gray-500">
                     {formattedDate || "Recently updated"}
                   </p>

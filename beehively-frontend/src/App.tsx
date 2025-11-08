@@ -7,6 +7,7 @@ import Signup from './pages/Signup'
 import ContentDetail from './pages/ContentDetail'
 import Profile from './pages/Profile'
 import CreatePost from './pages/CreatePost'
+import UserProfile from './pages/UserProfile'
 import NotFound from './pages/NotFound'
 
 const App = () => {
@@ -19,6 +20,7 @@ const App = () => {
           <Route path="signup" element={<Signup />} />
           <Route path="content/:id" element={<ContentDetail />} />
           <Route path="profile" element={<Profile />} />
+          <Route path="users/:id" element={<UserProfile />} />
           <Route path="create-post" element={<CreatePost />} />
           <Route path="*" element={<NotFound />} />
         </Route>
