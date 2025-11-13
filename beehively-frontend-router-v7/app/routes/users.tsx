@@ -1,8 +1,10 @@
 import { useMemo } from "react";
-import { useLoaderData, useNavigate, useNavigation } from "react-router";
-import type { LoaderFunctionArgs, ActionFunctionArgs } from "react-router";
+import { useNavigate, useNavigation } from "react-router";
+import type { LoaderFunctionArgs } from "react-router";
 import { getUserProfile, type PublicUser } from "../services/userApi";
 import type { Post } from "../services/postApi";
+import type { Route } from "./+types/users";
+
 
 type LoaderData = {
   user: PublicUser | null;
@@ -56,10 +58,10 @@ export async function loader({
   }
 }
 
-export default function UserProfile() {
+export default function UserProfile({ loaderData }: Route.ComponentProps) {
   const navigate = useNavigate();
   const navigation = useNavigation();
-  const { user, posts, error } = useLoaderData<typeof loader>();
+  const { user, posts, error } = loaderData;
 
   const isTransitioning = navigation.state === "loading" && !user && !error;
 

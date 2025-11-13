@@ -1,6 +1,7 @@
-import { useNavigate, useNavigation, useLoaderData } from "react-router";
-import type { LoaderFunctionArgs, ActionFunctionArgs } from "react-router";
+import { useNavigate, useNavigation } from "react-router";
+import type { LoaderFunctionArgs } from "react-router";
 import { getPostById, type Post } from "../services/postApi";
+import type { Route } from "./+types/content";
 
 type LoaderData = {
   post: Post | null;
@@ -73,10 +74,10 @@ export async function loader({
   }
 }
 
-export default function ContentDetail() {
+export default function ContentDetail({ loaderData }: Route.ComponentProps) {
   const navigate = useNavigate();
   const navigation = useNavigation();
-  const { post, error } = useLoaderData<typeof loader>();
+  const { post, error } = loaderData;
 
   const authorName = post ? getAuthorName(post.author) : "Unknown Author";
   const authorId = post ? getAuthorId(post.author) : undefined;

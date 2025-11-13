@@ -3,13 +3,13 @@ import type { ChangeEvent, MouseEvent } from "react";
 import {
   Form,
   redirect,
-  useLoaderData,
   useNavigation,
   useNavigate,
   useSubmit,
 } from "react-router";
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 import { listPosts, type Post } from "../services/postApi";
+import type { Route } from "./+types/home";
 
 type SortOption = "newest" | "oldest" | "title";
 
@@ -131,14 +131,14 @@ export async function action({ request }: ActionFunctionArgs) {
   return redirect(url.pathname + url.search);
 }
 
-export default function Home() {
+export default function Home({ loaderData }: Route.ComponentProps) {
   const navigate = useNavigate();
   const {
     posts,
     error,
     sortBy: loaderSort,
     searchTerm: loaderSearch,
-  } = useLoaderData<typeof loader>();
+  } = loaderData;
   const navigation = useNavigation();
   const submit = useSubmit();
   const formRef = useRef<HTMLFormElement>(null);

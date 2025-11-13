@@ -2,7 +2,6 @@ import React, { useEffect, useState } from "react";
 import {
   Form,
   redirect,
-  useActionData,
   useNavigate,
   useNavigation,
   type ActionFunctionArgs,
@@ -11,6 +10,7 @@ import { signup as signupRequest } from "../services/authApi";
 import hideIcon from "../../public/assets/hide.png";
 import showIcon from "../../public/assets/show.png";
 import { removeCookie, setCookie } from "~/utils/storage";
+import type { Route } from "./+types/signup";
 
 type FormValues = {
   name: string;
@@ -136,9 +136,8 @@ export async function action({ request }: ActionFunctionArgs) {
   }
 }
 
-export default function Signup() {
+export default function Signup({ actionData }: Route.ComponentProps) {
   const navigate = useNavigate();
-  const actionData = useActionData<ActionData>();
   const navigation = useNavigation();
   const [formValues, setFormValues] = useState<FormValues>(initialValues);
   const [showPassword, setShowPassword] = useState(false);

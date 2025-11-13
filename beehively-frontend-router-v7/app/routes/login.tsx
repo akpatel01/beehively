@@ -2,7 +2,6 @@ import React, { useEffect, useState } from "react";
 import {
   Form,
   redirect,
-  useActionData,
   useNavigate,
   useNavigation,
   type ActionFunctionArgs,
@@ -11,6 +10,7 @@ import { login as loginRequest } from "../services/authApi";
 import hideIcon from "../../public/assets/hide.png";
 import showIcon from "../../public/assets/show.png";
 import { setCookie, removeCookie } from "~/utils/storage";
+import type { Route } from "./+types/login";
 
 const initialValues = {
   email: "",
@@ -98,9 +98,8 @@ export async function action({ request }: ActionFunctionArgs) {
   }
 }
 
-export default function Login() {
+export default function Login({ actionData }: Route.ComponentProps) {
   const navigate = useNavigate();
-  const actionData = useActionData<ActionData>();
   const navigation = useNavigation();
   const [formValues, setFormValues] = useState(initialValues);
   const [showPassword, setShowPassword] = useState(false);

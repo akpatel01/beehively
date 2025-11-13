@@ -3,13 +3,13 @@ import type { ChangeEvent, KeyboardEvent } from "react";
 import {
   Form,
   redirect,
-  useActionData,
   useNavigate,
   useNavigation,
 } from "react-router";
 import type { ActionFunctionArgs } from "react-router";
 import { createPost } from "../services/postApi";
 import { getCookie } from "~/utils/storage";
+import type { Route } from "./+types/create-post";
 
 type PostFormState = {
   title: string;
@@ -54,7 +54,7 @@ export async function action({ request }: ActionFunctionArgs) {
   const existingTags = formData
     .getAll("tags")
     .map((entry) => (typeof entry === "string" ? entry.trim() : ""))
-    .filter(Boolean);
+    .filter(Boolean) as string[];
 
   const title = titleValue.trim();
   const content = contentValue.trim();
@@ -78,11 +78,11 @@ export async function action({ request }: ActionFunctionArgs) {
       values: {
         title: titleValue,
         content: contentValue,
-        status: statusValue,
+        status: statusValue as PostFormState["status"],
         tags: existingTags,
         tagsInput: tagsInputValue,
       },
-    };
+    } as ActionData;
   }
 
   try {
@@ -109,17 +109,16 @@ export async function action({ request }: ActionFunctionArgs) {
       values: {
         title: titleValue,
         content: contentValue,
-        status: statusValue,
+        status: statusValue as PostFormState["status"],
         tags: existingTags,
         tagsInput: tagsInputValue,
       },
-    };
+    } as ActionData;
   }
 }
 
-export default function CreatePost() {
+export default function CreatePost({ actionData }: Route.ComponentProps) {
   const navigate = useNavigate();
-  const actionData = useActionData<ActionData>();
   const navigation = useNavigation();
   const [formData, setFormData] = useState<PostFormState>(initialFormState);
   const [error, setError] = useState("");

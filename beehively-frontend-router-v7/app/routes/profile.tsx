@@ -2,8 +2,6 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Form,
   redirect,
-  useActionData,
-  useLoaderData,
   useNavigate,
   useNavigation,
   useSubmit,
@@ -19,6 +17,7 @@ import {
 } from "../services/postApi";
 import { getCookie } from "~/utils/storage";
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
+import type { Route } from "./+types/profile";
 
 type EditFormState = {
   title: string;
@@ -228,17 +227,16 @@ export async function action({ request }: ActionFunctionArgs) {
   return null;
 }
 
-export default function Profile() {
+export default function Profile({ loaderData, actionData }: Route.ComponentProps) {
   const navigate = useNavigate();
   const submit = useSubmit();
   const navigation = useNavigation();
-  const actionData = useActionData<ProfileActionData>();
   const {
     posts: loaderPosts,
     error: loaderError,
     statusFilter: loaderStatus,
     authorId: loaderAuthorId,
-  } = useLoaderData<typeof loader>();
+  } = loaderData;
 
   const [userName, setUserName] = useState("Guest");
   const [userId, setUserId] = useState<string | null>(loaderAuthorId);
