@@ -46,25 +46,20 @@ type ActionData = {
 export async function action({ request }: ActionFunctionArgs) {
   const formData = await request.formData();
 
-  const titleEntry = formData.get("title");
-  const contentEntry = formData.get("content");
-  const statusEntry = formData.get("status");
-  const tagsInputEntry = formData.get("tagsInput");
-
-  const rawTitle = typeof titleEntry === "string" ? titleEntry : "";
-  const rawContent = typeof contentEntry === "string" ? contentEntry : "";
-  const rawStatus = typeof statusEntry === "string" ? statusEntry : "";
-  const rawTagsInput = typeof tagsInputEntry === "string" ? tagsInputEntry : "";
+  const titleValue = formData.get("title") as String;
+  const contentValue = formData.get("content") as String;
+  const statusValue = formData.get("status") as "draft" | "published" | "archived";
+  const tagsInputValue = formData.get("tagsInput") as string
 
   const existingTags = formData
     .getAll("tags")
     .map((entry) => (typeof entry === "string" ? entry.trim() : ""))
     .filter(Boolean);
 
-  const title = rawTitle.trim();
-  const content = rawContent.trim();
-  const status = isPostStatus(rawStatus) ? rawStatus : "draft";
-  const pendingTag = rawTagsInput.trim();
+  const title = titleValue.trim();
+  const content = contentValue.trim();
+  const status = isPostStatus(statusValue) ? statusValue : "draft";
+  const pendingTag = tagsInputValue.trim();
 
   const tagsForRequest = pendingTag
     ? Array.from(new Set([...existingTags, pendingTag]))
@@ -81,11 +76,11 @@ export async function action({ request }: ActionFunctionArgs) {
       fieldErrors,
       formError: "Please fill in the required fields.",
       values: {
-        title: rawTitle,
-        content: rawContent,
-        status,
+        title: titleValue,
+        content: contentValue,
+        status: statusValue,
         tags: existingTags,
-        tagsInput: rawTagsInput,
+        tagsInput: tagsInputValue,
       },
     };
   }
@@ -112,11 +107,11 @@ export async function action({ request }: ActionFunctionArgs) {
       fieldErrors: { title: "", content: "", status: "" },
       formError: message,
       values: {
-        title: rawTitle,
-        content: rawContent,
-        status,
+        title: titleValue,
+        content: contentValue,
+        status: statusValue,
         tags: existingTags,
-        tagsInput: rawTagsInput,
+        tagsInput: tagsInputValue,
       },
     };
   }

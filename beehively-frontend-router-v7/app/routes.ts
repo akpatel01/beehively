@@ -7,8 +7,8 @@ export default [
         route("signup", "routes/signup.tsx"),
         route("profile", "routes/profile.tsx"),
         route("create-post", "routes/create-post.tsx"),
-        route("content/:id", "routes/content.$id.tsx"),
-        route("users/:id", "routes/users.$id.tsx"),
+        route("content/:id", "routes/content.tsx"),
+        route("users/:id", "routes/users.tsx"),
     ]),
     route("*", "routes/notfound.tsx"),
 ] satisfies RouteConfig;

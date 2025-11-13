@@ -152,15 +152,10 @@ export async function action({ request }: ActionFunctionArgs) {
       };
     }
 
-    const title = formData.get("title");
-    const content = formData.get("content");
-    const statusValue = formData.get("status");
-    const tags = formData.get("tags");
-
-    const rawTitle = typeof title === "string" ? title : "";
-    const rawContent = typeof content === "string" ? content : "";
-    const rawStatus = typeof statusValue === "string" ? statusValue : "";
-    const rawTags = typeof tags === "string" ? tags : "";
+    const rawTitle = formData.get("title") as string;
+    const rawContent = formData.get("content") as string;
+    const rawStatus = formData.get("status") as string;
+    const rawTags = formData.get("tags") as string
 
     const trimmedTitle = rawTitle.trim();
     const trimmedContent = rawContent.trim();
