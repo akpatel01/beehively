@@ -1,50 +1,40 @@
 import Cookies from "js-cookie";
-import { parse, serialize } from "cookie";
+import { parse as parseCookie, serialize as serializeCookie } from "cookie";
 
-interface CookieOptions {
-  expires?: number; // days
-  path?: string;
-}
+const isBrowser = typeof document !== "undefined";
 
-export const setCookie = (
-  key: string,
-  value: string,
-  options: CookieOptions = { expires: 7 },
-  request?: Request
-): string | void => {
-  if (typeof window === "undefined" && request) {
-    return serialize(key, value, {
-      path: options.path || "/",
-      maxAge: options.expires ? options.expires * 24 * 60 * 60 : undefined,
-    });
-  } else {
-    Cookies.set(key, value, options);
-  }
+export type CookieContext = {
+  request?: Request;
+  headers?: Headers;
 };
-export const getCookie = (key: string, request?: Request): string | undefined => {
-  if (typeof window === "undefined") {
-    if (!request) return undefined;
-    const cookieHeader = request.headers.get("Cookie") || "";
-    const cookies = parse(cookieHeader);
-    return cookies[key];
-  } else {
-    return Cookies.get(key);
+
+// Get cookie from browser or server
+export const getCookie = (key: string, context?: CookieContext): string | undefined => {
+  if (isBrowser) return Cookies.get(key);
+
+  const header = context?.request?.headers.get("cookie");
+  if (!header) return undefined;
+
+  const cookies = parseCookie(header);
+  return cookies[key];
+};
+
+// Set cookie in browser or server
+export const setCookie = (key: string, value: string, context?: CookieContext) => {
+  if (isBrowser) {
+    Cookies.set(key, value);
+  } else if (context?.headers) {
+    const serialized = serializeCookie(key, value);
+    context.headers.append("Set-Cookie", serialized);
   }
 };
 
-
-
-export const removeCookie = (key: string, request?: Request): string | void => {
-  if (typeof window === "undefined" && request) {
-    return serialize(key, "", {
-      path: "/",
-      maxAge: 0,
-    });
-  } else {
+// Remove cookie in browser or server
+export const removeCookie = (key: string, context?: CookieContext) => {
+  if (isBrowser) {
     Cookies.remove(key);
+  } else if (context?.headers) {
+    const serialized = serializeCookie(key, "", { maxAge: 0 });
+    context.headers.append("Set-Cookie", serialized);
   }
 };
-
-
-
-

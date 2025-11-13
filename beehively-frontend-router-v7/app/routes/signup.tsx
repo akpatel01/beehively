@@ -1,318 +1,371 @@
-import React, { useState } from "react";
-import { useNavigate } from "react-router";
+import React, { useEffect, useState } from "react";
+import {
+  Form,
+  redirect,
+  useActionData,
+  useNavigate,
+  useNavigation,
+  type ActionFunctionArgs,
+} from "react-router";
 import { signup as signupRequest } from "../services/authApi";
 import hideIcon from "../../public/assets/hide.png";
 import showIcon from "../../public/assets/show.png";
 import { removeCookie, setCookie } from "~/utils/storage";
 
 type FormValues = {
-    name: string;
-    email: string;
-    password: string;
-    confirm: string;
+  name: string;
+  email: string;
+  password: string;
+  confirm: string;
 };
 
 type FieldErrors = Record<keyof FormValues, string>;
 
 const initialValues: FormValues = {
-    name: "",
-    email: "",
-    password: "",
-    confirm: "",
+  name: "",
+  email: "",
+  password: "",
+  confirm: "",
 };
 
 const initialFieldErrors: FieldErrors = {
-    name: "",
-    email: "",
-    password: "",
-    confirm: "",
+  name: "",
+  email: "",
+  password: "",
+  confirm: "",
+};
+
+type ActionData = {
+  fieldErrors: FieldErrors;
+  formError: string;
+  values: FormValues;
 };
 
 const validateField = (name: keyof FormValues, value: string) => {
-    if (!value) {
-        if (name === "confirm") {
-            return "Confirm password is required";
-        }
-        return `${name.charAt(0).toUpperCase() + name.slice(1)} is required`;
+  if (!value) {
+    if (name === "confirm") {
+      return "Confirm password is required";
     }
-    return "";
+    return `${name.charAt(0).toUpperCase() + name.slice(1)} is required`;
+  }
+  return "";
 };
 
 const validatePasswordsMatch = (password: string, confirm: string) => {
-    if (!password || !confirm) {
-        return "";
-    }
-    return password === confirm ? "" : "Passwords do not match";
+  if (!password || !confirm) {
+    return "";
+  }
+  return password === confirm ? "" : "Passwords do not match";
 };
 
-export default function Signup() {
-    const navigate = useNavigate();
-    const [formValues, setFormValues] = useState<FormValues>(initialValues);
-    const [showPassword, setShowPassword] = useState(false);
-    const [showConfirm, setShowConfirm] = useState(false);
-    const [loading, setLoading] = useState(false);
-    const [error, setError] = useState("");
-    const [fieldErrors, setFieldErrors] =
-        useState<FieldErrors>(initialFieldErrors);
+export async function action({ request }: ActionFunctionArgs) {
+  const formData = await request.formData();
 
-    const signupData = (event: React.ChangeEvent<HTMLInputElement>) => {
-        const { name, value } = event.target;
-        const key = name as keyof FormValues;
+  const nameEntry = formData.get("name");
+  const emailEntry = formData.get("email");
+  const passwordEntry = formData.get("password");
+  const confirmEntry = formData.get("confirm");
 
-        setFormValues((prev) => {
-            const nextValues: FormValues = { ...prev, [key]: value };
+  const rawValues: FormValues = {
+    name: typeof nameEntry === "string" ? nameEntry : "",
+    email: typeof emailEntry === "string" ? emailEntry : "",
+    password: typeof passwordEntry === "string" ? passwordEntry : "",
+    confirm: typeof confirmEntry === "string" ? confirmEntry : "",
+  };
 
-            setFieldErrors((prevErrors) => {
-                const nextErrors: FieldErrors = { ...prevErrors };
-                nextErrors[key] = validateField(key, value);
+  const trimmedName = rawValues.name.trim();
+  const trimmedEmail = rawValues.email.trim();
 
-                if (key === "password" || key === "confirm") {
-                    const mismatchError = validatePasswordsMatch(
-                        nextValues.password,
-                        nextValues.confirm
-                    );
+  const fieldErrors: FieldErrors = {
+    name: validateField("name", trimmedName),
+    email: validateField("email", trimmedEmail),
+    password: validateField("password", rawValues.password),
+    confirm: validateField("confirm", rawValues.confirm),
+  };
 
-                    if (mismatchError) {
-                        nextErrors.password = mismatchError;
-                        nextErrors.confirm = mismatchError;
-                    } else {
-                        nextErrors.password = validateField(
-                            "password",
-                            nextValues.password
-                        );
-                        nextErrors.confirm = validateField("confirm", nextValues.confirm);
-                    }
-                }
+  const mismatchError = validatePasswordsMatch(
+    rawValues.password,
+    rawValues.confirm
+  );
 
-                return nextErrors;
-            });
+  if (mismatchError) {
+    fieldErrors.password = mismatchError;
+    fieldErrors.confirm = mismatchError;
+  }
 
-            return nextValues;
-        });
+  if (Object.values(fieldErrors).some(Boolean)) {
+    return {
+      fieldErrors,
+      formError: mismatchError
+        ? mismatchError
+        : "Please fix the highlighted fields.",
+      values: rawValues,
     };
+  }
 
-    const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
-        setError("");
-        const nextErrors: FieldErrors = {
-            name: validateField("name", formValues.name),
-            email: validateField("email", formValues.email),
-            password: validateField("password", formValues.password),
-            confirm: validateField("confirm", formValues.confirm),
-        };
+  try {
+    const data = await signupRequest({
+      name: trimmedName,
+      email: trimmedEmail,
+      password: rawValues.password,
+    });
 
-        const mismatchError = validatePasswordsMatch(
-            formValues.password,
-            formValues.confirm
-        );
+    const headers = new Headers();
 
-        if (mismatchError) {
+    removeCookie("token", { headers });
+    removeCookie("user", { headers });
+
+    setCookie("token", data.token, { headers });
+    if (data.user) {
+      setCookie("user", JSON.stringify(data.user), { headers });
+    }
+
+    return redirect("/", { headers });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Signup failed";
+    return {
+      fieldErrors: {
+        name: "",
+        email: "",
+        password: "",
+        confirm: "",
+      },
+      formError: message,
+      values: rawValues,
+    };
+  }
+}
+
+export default function Signup() {
+  const navigate = useNavigate();
+  const actionData = useActionData<ActionData>();
+  const navigation = useNavigation();
+  const [formValues, setFormValues] = useState<FormValues>(initialValues);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
+  const [error, setError] = useState("");
+  const [fieldErrors, setFieldErrors] =
+    useState<FieldErrors>(initialFieldErrors);
+
+  useEffect(() => {
+    if (!actionData) {
+      return;
+    }
+
+    setFieldErrors(actionData.fieldErrors);
+    setError(actionData.formError ?? "");
+    setFormValues(actionData.values);
+  }, [actionData]);
+
+  const isLoading = navigation.state !== "idle";
+
+  const signupData = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = event.target;
+    const key = name as keyof FormValues;
+
+    setFormValues((prev) => {
+      const nextValues: FormValues = { ...prev, [key]: value };
+
+      setFieldErrors((prevErrors) => {
+        const nextErrors: FieldErrors = { ...prevErrors };
+        nextErrors[key] = validateField(key, value);
+
+        if (key === "password" || key === "confirm") {
+          const mismatchError = validatePasswordsMatch(
+            nextValues.password,
+            nextValues.confirm
+          );
+
+          if (mismatchError) {
             nextErrors.password = mismatchError;
             nextErrors.confirm = mismatchError;
+          } else {
+            nextErrors.password = validateField(
+              "password",
+              nextValues.password
+            );
+            nextErrors.confirm = validateField("confirm", nextValues.confirm);
+          }
         }
 
-        setFieldErrors(nextErrors);
+        return nextErrors;
+      });
 
-        const hasErrors = Object.values(nextErrors).some(Boolean);
+      return nextValues;
+    });
+    setError("");
+  };
 
-        if (hasErrors) {
-            return;
-        }
+  return (
+    <div className="min-h-[calc(100vh-80px)] flex items-center justify-center px-4 py-12">
+      <div className="w-full max-w-md">
+        <div className="rounded-3xl bg-white/90 backdrop-blur-xl p-6 sm:p-8 md:p-10 shadow-2xl border border-gray-200">
+          <div className="mb-8 text-center">
+            <h2 className="text-2xl sm:text-3xl font-bold mb-2 bg-gradient-to-r from-pink-600 to-orange-600 bg-clip-text text-transparent">
+              Create account
+            </h2>
+            <p className="text-sm sm:text-base text-gray-600">
+              Join the hive and start creating amazing content
+            </p>
+          </div>
 
-        setLoading(true);
-
-        try {
-            const data = await signupRequest({
-                name: formValues.name,
-                email: formValues.email,
-                password: formValues.password,
-            });
-
-            removeCookie("token");
-            removeCookie("user");
-
-            setCookie("token", data.token, { expires: 7 });
-            if (data.user) {
-                setCookie("user", JSON.stringify(data.user), { expires: 7 });
-            }
-            navigate("/");
-        } catch (err) {
-            const message = err instanceof Error ? err.message : "Signup failed";
-            setError(message);
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    return (
-        <div className="min-h-[calc(100vh-80px)] flex items-center justify-center px-4 py-12">
-            <div className="w-full max-w-md">
-                <div className="rounded-3xl bg-white/90 backdrop-blur-xl p-6 sm:p-8 md:p-10 shadow-2xl border border-gray-200">
-                    <div className="mb-8 text-center">
-                        <h2 className="text-2xl sm:text-3xl font-bold mb-2 bg-gradient-to-r from-pink-600 to-orange-600 bg-clip-text text-transparent">
-                            Create account
-                        </h2>
-                        <p className="text-sm sm:text-base text-gray-600">
-                            Join the hive and start creating amazing content
-                        </p>
-                    </div>
-
-                    {/* Form */}
-                    <form onSubmit={handleSubmit} className="space-y-5">
-                        <div className="space-y-2">
-                            <label
-                                htmlFor="name"
-                                className="block text-sm font-semibold text-gray-700"
-                            >
-                                Full Name
-                            </label>
-                            <input
-                                id="name"
-                                name="name"
-                                value={formValues.name}
-                                onChange={signupData}
-                                className="w-full pl-10 pr-4 py-3 rounded-xl bg-white border border-gray-300 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent transition-all duration-200"
-                                placeholder="enter your name"
-                                aria-label="Full name"
-                            />
-                            {fieldErrors.name && (
-                                <p className="text-xs text-red-500">{fieldErrors.name}</p>
-                            )}
-                        </div>
-
-                        <div className="space-y-2">
-                            <label
-                                htmlFor="email"
-                                className="block text-sm font-semibold text-gray-700"
-                            >
-                                Email Address
-                            </label>
-
-                            <input
-                                id="email"
-                                type="email"
-                                value={formValues.email}
-                                name="email"
-                                onChange={signupData}
-                                className="w-full pl-10 pr-4 py-3 rounded-xl bg-white border border-gray-300 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent transition-all duration-200"
-                                placeholder="enter your email"
-                                aria-label="Email"
-                            />
-                            {fieldErrors.email && (
-                                <p className="text-xs text-red-500">{fieldErrors.email}</p>
-                            )}
-                        </div>
-
-                        <div className="space-y-2">
-                            <label
-                                htmlFor="password"
-                                className="block text-sm font-semibold text-gray-700"
-                            >
-                                Password
-                            </label>
-                            <div className="relative">
-                                <input
-                                    id="password"
-                                    type={showPassword ? "text" : "password"}
-                                    value={formValues.password}
-                                    name="password"
-                                    onChange={signupData}
-                                    className="w-full pl-10 pr-12 py-3 rounded-xl bg-white border border-gray-300 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent transition-all duration-200"
-                                    placeholder="At least 8 characters"
-                                    aria-label="Password"
-                                    minLength={8}
-                                />
-                                <button
-                                    type="button"
-                                    onClick={() => setShowPassword(!showPassword)}
-                                    className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600 transition-colors"
-                                    aria-label={showPassword ? "Hide password" : "Show password"}
-                                >
-                                    <img
-                                        src={showPassword ? hideIcon : showIcon}
-                                        alt={showPassword ? "Hide password" : "Show password"}
-                                        className="h-5 w-5 object-contain"
-                                    />
-                                </button>
-                            </div>
-                            {fieldErrors.password && (
-                                <p className="text-xs text-red-500">{fieldErrors.password}</p>
-                            )}
-                        </div>
-
-                        <div className="space-y-2">
-                            <label
-                                htmlFor="confirm"
-                                className="block text-sm font-semibold text-gray-700"
-                            >
-                                Confirm Password
-                            </label>
-                            <div className="relative">
-                                <input
-                                    id="confirm"
-                                    name="confirm"
-                                    type={showConfirm ? "text" : "password"}
-                                    value={formValues.confirm}
-                                    onChange={signupData}
-                                    className="w-full pl-10 pr-12 py-3 rounded-xl bg-white border border-gray-300 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent transition-all duration-200"
-                                    placeholder="Repeat your password"
-                                    aria-label="Confirm password"
-                                />
-                                <button
-                                    type="button"
-                                    onClick={() => setShowConfirm(!showConfirm)}
-                                    className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600 transition-colors"
-                                    aria-label={showConfirm ? "Hide password" : "Show password"}
-                                >
-                                    <img
-                                        src={showConfirm ? hideIcon : showIcon}
-                                        alt={showConfirm ? "Hide password" : "Show password"}
-                                        className="h-5 w-5 object-contain"
-                                    />
-                                </button>
-                            </div>
-                            {fieldErrors.confirm && (
-                                <p className="text-xs text-red-500">{fieldErrors.confirm}</p>
-                            )}
-                        </div>
-
-                        {error && (
-                            <p className="text-sm text-red-500 text-center">{error}</p>
-                        )}
-
-                        <button
-                            type="submit"
-                            disabled={loading}
-                            className="w-full py-3.5 rounded-xl bg-gradient-to-r from-pink-500 via-purple-500 to-orange-500 hover:from-pink-600 hover:via-purple-600 hover:to-orange-600 disabled:from-gray-400 disabled:to-gray-500 disabled:cursor-not-allowed disabled:opacity-50 font-semibold text-white shadow-lg shadow-pink-500/30 hover:shadow-xl hover:shadow-pink-500/40 transition-all duration-300 hover:scale-[1.02] active:scale-[0.98]"
-                            aria-label="Create account"
-                        >
-                            {loading ? "Creating account..." : "Create account"}
-                        </button>
-
-                        <div className="relative my-6">
-                            <div className="absolute inset-0 flex items-center">
-                                <div className="w-full border-t border-gray-300"></div>
-                            </div>
-                            <div className="relative flex justify-center text-sm">
-                                <span className="px-4 text-gray-500 bg-white/90">
-                                    or sign up with
-                                </span>
-                            </div>
-                        </div>
-
-                        <p className="text-center text-sm text-gray-600 mt-6">
-                            Already have an account?{" "}
-                            <button
-                                type="button"
-                                onClick={() => navigate("/login")}
-                                className="text-pink-600 hover:text-pink-700 font-semibold transition-colors"
-                            >
-                                Sign in
-                            </button>
-                        </p>
-                    </form>
-                </div>
+          {/* Form */}
+          <Form method="post" className="space-y-5" replace>
+            <div className="space-y-2">
+              <label
+                htmlFor="name"
+                className="block text-sm font-semibold text-gray-700"
+              >
+                Full Name
+              </label>
+              <input
+                id="name"
+                name="name"
+                value={formValues.name}
+                onChange={signupData}
+                className="w-full pl-10 pr-4 py-3 rounded-xl bg-white border border-gray-300 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent transition-all duration-200"
+                placeholder="enter your name"
+                aria-label="Full name"
+              />
+              {fieldErrors.name && (
+                <p className="text-xs text-red-500">{fieldErrors.name}</p>
+              )}
             </div>
+
+            <div className="space-y-2">
+              <label
+                htmlFor="email"
+                className="block text-sm font-semibold text-gray-700"
+              >
+                Email Address
+              </label>
+
+              <input
+                id="email"
+                type="email"
+                value={formValues.email}
+                name="email"
+                onChange={signupData}
+                className="w-full pl-10 pr-4 py-3 rounded-xl bg-white border border-gray-300 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent transition-all duration-200"
+                placeholder="enter your email"
+                aria-label="Email"
+              />
+              {fieldErrors.email && (
+                <p className="text-xs text-red-500">{fieldErrors.email}</p>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <label
+                htmlFor="password"
+                className="block text-sm font-semibold text-gray-700"
+              >
+                Password
+              </label>
+              <div className="relative">
+                <input
+                  id="password"
+                  type={showPassword ? "text" : "password"}
+                  value={formValues.password}
+                  name="password"
+                  onChange={signupData}
+                  className="w-full pl-10 pr-12 py-3 rounded-xl bg-white border border-gray-300 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent transition-all duration-200"
+                  placeholder="At least 8 characters"
+                  aria-label="Password"
+                  minLength={8}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600 transition-colors"
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                >
+                  <img
+                    src={showPassword ? hideIcon : showIcon}
+                    alt={showPassword ? "Hide password" : "Show password"}
+                    className="h-5 w-5 object-contain"
+                  />
+                </button>
+              </div>
+              {fieldErrors.password && (
+                <p className="text-xs text-red-500">{fieldErrors.password}</p>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <label
+                htmlFor="confirm"
+                className="block text-sm font-semibold text-gray-700"
+              >
+                Confirm Password
+              </label>
+              <div className="relative">
+                <input
+                  id="confirm"
+                  name="confirm"
+                  type={showConfirm ? "text" : "password"}
+                  value={formValues.confirm}
+                  onChange={signupData}
+                  className="w-full pl-10 pr-12 py-3 rounded-xl bg-white border border-gray-300 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent transition-all duration-200"
+                  placeholder="Repeat your password"
+                  aria-label="Confirm password"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowConfirm(!showConfirm)}
+                  className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600 transition-colors"
+                  aria-label={showConfirm ? "Hide password" : "Show password"}
+                >
+                  <img
+                    src={showConfirm ? hideIcon : showIcon}
+                    alt={showConfirm ? "Hide password" : "Show password"}
+                    className="h-5 w-5 object-contain"
+                  />
+                </button>
+              </div>
+              {fieldErrors.confirm && (
+                <p className="text-xs text-red-500">{fieldErrors.confirm}</p>
+              )}
+            </div>
+
+            {error && (
+              <p className="text-sm text-red-500 text-center">{error}</p>
+            )}
+
+            <button
+              type="submit"
+              disabled={isLoading}
+              className="w-full py-3.5 rounded-xl bg-gradient-to-r from-pink-500 via-purple-500 to-orange-500 hover:from-pink-600 hover:via-purple-600 hover:to-orange-600 disabled:from-gray-400 disabled:to-gray-500 disabled:cursor-not-allowed disabled:opacity-50 font-semibold text-white shadow-lg shadow-pink-500/30 hover:shadow-xl hover:shadow-pink-500/40 transition-all duration-300 hover:scale-[1.02] active:scale-[0.98]"
+              aria-label="Create account"
+              aria-busy={isLoading}
+            >
+              {isLoading ? "Creating account..." : "Create account"}
+            </button>
+
+            <div className="relative my-6">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-gray-300"></div>
+              </div>
+              <div className="relative flex justify-center text-sm">
+                <span className="px-4 text-gray-500 bg-white/90">
+                  or sign up with
+                </span>
+              </div>
+            </div>
+
+            <p className="text-center text-sm text-gray-600 mt-6">
+              Already have an account?{" "}
+              <button
+                type="button"
+                onClick={() => navigate("/login")}
+                className="text-pink-600 hover:text-pink-700 font-semibold transition-colors"
+              >
+                Sign in
+              </button>
+            </p>
+          </Form>
         </div>
-    );
+      </div>
+    </div>
+  );
 }

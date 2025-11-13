@@ -77,9 +77,24 @@ type RestorePostsResponse = {
     posts: Post[]
 }
 
-export const createPost = async (payload: CreatePostPayload) => {
+export const createPost = async (
+    payload: CreatePostPayload,
+    token?: string | null
+) => {
     try {
-        const { data } = await apiClient.post<CreatePostResponse>('/posts/create-post', payload)
+        const config = token
+            ? {
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                },
+            }
+            : undefined
+
+        const { data } = await apiClient.post<CreatePostResponse>(
+            '/posts/create-post',
+            payload,
+            config
+        )
         return data
     } catch (error) {
         throw new Error(extractAxiosErrorMessage(error))
@@ -95,9 +110,25 @@ export const listPosts = async (params?: { status?: Post['status']; author?: str
     }
 }
 
-export const updatePost = async (id: string, payload: UpdatePostPayload) => {
+export const updatePost = async (
+    id: string,
+    payload: UpdatePostPayload,
+    token?: string | null
+) => {
     try {
-        const { data } = await apiClient.put<UpdatePostResponse>(`/posts/update-post/${id}`, payload)
+        const config = token
+            ? {
+                  headers: {
+                      Authorization: `Bearer ${token}`,
+                  },
+              }
+            : undefined
+
+        const { data } = await apiClient.put<UpdatePostResponse>(
+            `/posts/update-post/${id}`,
+            payload,
+            config
+        )
         return data
     } catch (error) {
         throw new Error(extractAxiosErrorMessage(error))

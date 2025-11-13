@@ -1,5 +1,12 @@
-import React, { useState } from "react";
-import { useNavigate } from "react-router";
+import React, { useEffect, useState } from "react";
+import {
+  Form,
+  redirect,
+  useActionData,
+  useNavigate,
+  useNavigation,
+  type ActionFunctionArgs,
+} from "react-router";
 import { login as loginRequest } from "../services/authApi";
 import hideIcon from "../../public/assets/hide.png";
 import showIcon from "../../public/assets/show.png";
@@ -36,13 +43,81 @@ const getLoginErrors = (values: LoginValues) => {
   return errors;
 };
 
+type ActionData = {
+  fieldErrors: ReturnType<typeof createEmptyErrors>;
+  formError: string;
+  values: LoginValues;
+};
+
+export async function action({ request }: ActionFunctionArgs) {
+  const formData = await request.formData();
+
+  const emailEntry = formData.get("email");
+  const passwordEntry = formData.get("password");
+
+  const rawValues: LoginValues = {
+    email: typeof emailEntry === "string" ? emailEntry : "",
+    password: typeof passwordEntry === "string" ? passwordEntry : "",
+  };
+
+  const fieldErrors = getLoginErrors(rawValues);
+  const hasErrors = Object.values(fieldErrors).some(Boolean);
+
+  if (hasErrors) {
+    return {
+      fieldErrors,
+      formError: "Please fix the highlighted fields.",
+      values: rawValues,
+    };
+  }
+
+  try {
+    const data = await loginRequest({
+      email: rawValues.email.trim(),
+      password: rawValues.password.trim(),
+    });
+
+    const headers = new Headers();
+
+    removeCookie("token", { headers });
+    removeCookie("user", { headers });
+
+    setCookie("token", data.token, { headers });
+    if (data.user) {
+      setCookie("user", JSON.stringify(data.user), { headers });
+    }
+
+    return redirect("/", { headers });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Login failed";
+    return {
+      fieldErrors: createEmptyErrors(),
+      formError: message,
+      values: rawValues,
+    };
+  }
+}
+
 export default function Login() {
   const navigate = useNavigate();
+  const actionData = useActionData<ActionData>();
+  const navigation = useNavigation();
   const [formValues, setFormValues] = useState(initialValues);
   const [showPassword, setShowPassword] = useState(false);
-  const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [fieldErrors, setFieldErrors] = useState(createEmptyErrors);
+
+  useEffect(() => {
+    if (!actionData) {
+      return;
+    }
+
+    setFieldErrors(actionData.fieldErrors);
+    setError(actionData.formError ?? "");
+    setFormValues(actionData.values);
+  }, [actionData]);
+
+  const isLoading = navigation.state !== "idle";
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -50,45 +125,14 @@ export default function Login() {
       ...prev,
       [name]: value,
     }));
-  };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const validationErrors = getLoginErrors(formValues);
-    setFieldErrors(validationErrors);
-
-    const firstError = Object.values(validationErrors).find(Boolean) || "";
-    setError(firstError);
-    if (firstError) {
-      return;
-    }
-
-    setLoading(true);
-
-    try {
-      const data = await loginRequest({
-        email: formValues.email.trim(),
-        password: formValues.password.trim(),
-      });
-      removeCookie("token");
-      removeCookie("user");
-
-      setCookie("token", data.token, { expires: 7 });
-      if (data.user) {
-        setCookie("user", JSON.stringify(data.user), { expires: 7 });
-      }
-
-      setFormValues({ ...initialValues });
-      setFieldErrors(createEmptyErrors());
-      setError("");
-
-      navigate("/");
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Login failed";
-      setError(message);
-    } finally {
-      setLoading(false);
-    }
+    setFieldErrors((prev) => ({
+      ...prev,
+      [name]: value.trim()
+        ? ""
+        : `${name === "email" ? "Email" : "Password"} is required`,
+    }));
+    setError("");
   };
 
   return (
@@ -106,7 +150,7 @@ export default function Login() {
           </div>
 
           {/* Form */}
-          <form onSubmit={handleSubmit} className="space-y-5">
+          <Form method="post" className="space-y-5" replace>
             <div className="space-y-2">
               <label
                 htmlFor="email"
@@ -171,11 +215,12 @@ export default function Login() {
 
             <button
               type="submit"
-              disabled={loading}
+              disabled={isLoading}
               className="w-full py-3.5 rounded-xl bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500 hover:from-blue-600 hover:via-purple-600 hover:to-pink-600 font-semibold text-white shadow-lg shadow-blue-500/30 hover:shadow-xl hover:shadow-blue-500/40 transition-all duration-300 hover:scale-[1.02] active:scale-[0.98]"
               aria-label="Sign in"
+              aria-busy={isLoading}
             >
-              {loading ? "Signing in..." : "Sign in"}
+              {isLoading ? "Signing in..." : "Sign in"}
             </button>
 
             <div className="relative my-6">
@@ -199,7 +244,7 @@ export default function Login() {
                 Create one
               </button>
             </p>
-          </form>
+          </Form>
         </div>
       </div>
     </div>

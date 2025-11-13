@@ -1,12 +1,14 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  Form,
   redirect,
+  useActionData,
   useLoaderData,
   useNavigate,
   useNavigation,
   useSubmit,
 } from "react-router";
-import type { FormEvent, KeyboardEvent } from "react";
+import type { KeyboardEvent } from "react";
 import {
   bulkDeletePosts,
   deletePost,
@@ -39,6 +41,14 @@ type LoaderData = {
   authorId: string | null;
 };
 
+type ProfileActionData = {
+  intent: "update-post";
+  postId: string;
+  post?: Post;
+  error?: string;
+  values?: EditFormState;
+} | null;
+
 const isStatusFilter = (value: unknown): value is StatusFilter => {
   return (
     value === "all" ||
@@ -46,6 +56,10 @@ const isStatusFilter = (value: unknown): value is StatusFilter => {
     value === "published" ||
     value === "archived"
   );
+};
+
+const isPostStatus = (value: unknown): value is Post["status"] => {
+  return value === "draft" || value === "published" || value === "archived";
 };
 
 export async function loader({
@@ -128,6 +142,94 @@ export async function action({ request }: ActionFunctionArgs) {
     }
   }
 
+  if (intent === "update-post") {
+    const postIdEntry = formData.get("postId");
+    if (typeof postIdEntry !== "string" || !postIdEntry.trim()) {
+      return {
+        intent: "update-post" as const,
+        postId: "",
+        error: "Invalid post selection.",
+      };
+    }
+
+    const title = formData.get("title");
+    const content = formData.get("content");
+    const statusValue = formData.get("status");
+    const tags = formData.get("tags");
+
+    const rawTitle = typeof title === "string" ? title : "";
+    const rawContent = typeof content === "string" ? content : "";
+    const rawStatus = typeof statusValue === "string" ? statusValue : "";
+    const rawTags = typeof tags === "string" ? tags : "";
+
+    const trimmedTitle = rawTitle.trim();
+    const trimmedContent = rawContent.trim();
+    const status = isPostStatus(rawStatus) ? rawStatus : "draft";
+    const tagsList = rawTags
+      .split(",")
+      .map((tag) => tag.trim())
+      .filter(Boolean);
+    const normalizedTags = Array.from(new Set(tagsList));
+    const normalizedTagsString = normalizedTags.join(", ");
+
+    const values: EditFormState = {
+      title: trimmedTitle,
+      content: trimmedContent,
+      status,
+      tags: normalizedTagsString,
+    };
+
+    if (!trimmedTitle || !trimmedContent) {
+      return {
+        intent: "update-post" as const,
+        postId: postIdEntry,
+        error: "Title and content are required.",
+        values,
+      };
+    }
+
+    const token = getCookie("token", { request });
+    if (!token) {
+      return {
+        intent: "update-post" as const,
+        postId: postIdEntry,
+        error: "You must be signed in to update a post.",
+        values,
+      };
+    }
+
+    try {
+      const response = await updatePost(
+        postIdEntry,
+        {
+          title: trimmedTitle,
+          status,
+          content: trimmedContent,
+          tags: normalizedTags,
+        },
+        token
+      );
+
+      return {
+        intent: "update-post" as const,
+        postId: postIdEntry,
+        post: response.post,
+      };
+    } catch (apiError) {
+      const message =
+        apiError instanceof Error
+          ? apiError.message
+          : "Failed to update the post.";
+
+      return {
+        intent: "update-post" as const,
+        postId: postIdEntry,
+        error: message,
+        values,
+      };
+    }
+  }
+
   return null;
 }
 
@@ -135,6 +237,7 @@ export default function Profile() {
   const navigate = useNavigate();
   const submit = useSubmit();
   const navigation = useNavigation();
+  const actionData = useActionData<ProfileActionData>();
   const {
     posts: loaderPosts,
     error: loaderError,
@@ -164,8 +267,34 @@ export default function Profile() {
   );
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const [undoInfo, setUndoInfo] = useState<UndoInfo | null>(null);
+  const lastSubmissionIntentRef = useRef<string | null>(null);
 
-  const loading = !userInitialized || navigation.state !== "idle";
+  useEffect(() => {
+    if (navigation.state === "submitting") {
+      const intentValue = navigation.formData?.get("intent");
+      const intent = typeof intentValue === "string" ? intentValue : null;
+      lastSubmissionIntentRef.current = intent;
+
+      if (intent === "update-post") {
+        const postIdValue = navigation.formData?.get("postId");
+        setSavingPostId(typeof postIdValue === "string" ? postIdValue : null);
+      }
+    } else if (navigation.state === "idle") {
+      lastSubmissionIntentRef.current = null;
+      setSavingPostId(null);
+    }
+  }, [navigation.state, navigation.formData]);
+
+  const isUpdateSubmissionActive =
+    (navigation.state === "submitting" &&
+      navigation.formData?.get("intent") === "update-post") ||
+    (navigation.state === "loading" &&
+      lastSubmissionIntentRef.current === "update-post");
+
+  const loading =
+    !userInitialized ||
+    ((navigation.state === "submitting" || navigation.state === "loading") &&
+      !isUpdateSubmissionActive);
 
   const filteredPosts = useMemo(() => {
     if (statusFilter === "all") {
@@ -218,6 +347,40 @@ export default function Profile() {
   useEffect(() => {
     setError(loaderError);
   }, [loaderError]);
+
+  useEffect(() => {
+    if (!actionData || actionData.intent !== "update-post") {
+      return;
+    }
+
+    if (actionData.post && actionData.postId) {
+      const updatedPost = actionData.post;
+      setAllPosts((prev) =>
+        prev.map((item) => (item._id === updatedPost._id ? updatedPost : item))
+      );
+      setEditingPostId(null);
+      setEditForm({
+        title: "",
+        status: "draft",
+        content: "",
+        tags: "",
+      });
+      setError("");
+      return;
+    }
+
+    if (actionData.postId) {
+      setEditingPostId(actionData.postId);
+    }
+
+    if (actionData.values) {
+      setEditForm(actionData.values);
+    }
+
+    if (actionData.error) {
+      setError(actionData.error);
+    }
+  }, [actionData]);
 
   useEffect(() => {
     setStatusFilter(loaderStatus);
@@ -322,74 +485,33 @@ export default function Profile() {
   };
 
   const handleTagKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
-    if (event.key !== "Enter") {
+    if (event.key !== "Enter" && event.key !== ",") {
       return;
     }
 
     event.preventDefault();
 
     const rawValue = event.currentTarget.value;
-    const segments = rawValue.split(",");
-    const candidate = segments.pop()?.trim() ?? "";
-    const existing = segments.map((segment) => segment.trim()).filter(Boolean);
+    const tags = rawValue
+      .split(",")
+      .map((segment) => segment.trim())
+      .filter(Boolean);
 
-    const nextTags = [...existing];
-    if (candidate) {
-      nextTags.push(candidate);
-    }
+    const uniqueTags = Array.from(new Set(tags));
+    const nextValue = uniqueTags.length ? `${uniqueTags.join(", ")}, ` : "";
 
-    const formatted = nextTags.join(", ");
-    const nextValue = formatted ? `${formatted}, ` : "";
     setEditForm((prev) => ({
       ...prev,
       tags: nextValue,
     }));
 
+    setError("");
+
     requestAnimationFrame(() => {
-      event.currentTarget.selectionStart = event.currentTarget.selectionEnd =
-        nextValue.length;
+      const position = nextValue.length;
+      event.currentTarget.selectionStart = position;
+      event.currentTarget.selectionEnd = position;
     });
-  };
-
-  const handleUpdatePost = async (
-    event: FormEvent<HTMLFormElement>,
-    id: string
-  ) => {
-    event.preventDefault();
-
-    if (!editForm.title.trim() || !editForm.content.trim()) {
-      setError("Title and content are required");
-      return;
-    }
-
-    const normalizedTags = editForm.tags
-      .split(",")
-      .map((tag) => tag.trim())
-      .filter(Boolean);
-
-    try {
-      setSavingPostId(id);
-      setError("");
-      const response = await updatePost(id, {
-        title: editForm.title.trim(),
-        status: editForm.status,
-        content: editForm.content.trim(),
-        tags: normalizedTags,
-      });
-
-      setAllPosts((prev) =>
-        prev.map((item) => (item._id === id ? response.post : item))
-      );
-      handleCancelEdit();
-    } catch (apiError) {
-      const message =
-        apiError instanceof Error
-          ? apiError.message
-          : "Failed to update the post";
-      setError(message);
-    } finally {
-      setSavingPostId(null);
-    }
   };
 
   const handleCancelEdit = () => {
@@ -400,6 +522,7 @@ export default function Profile() {
       content: "",
       tags: "",
     });
+    setError("");
   };
 
   const openDeleteModal = (post: Post) => {
@@ -712,12 +835,17 @@ export default function Profile() {
                       </div>
 
                       {editingPostId === post._id && (
-                        <form
-                          onSubmit={(event) =>
-                            handleUpdatePost(event, post._id)
-                          }
+                        <Form
+                          method="post"
+                          replace
                           className="border border-gray-200 rounded-lg p-4 space-y-3 bg-gray-50"
                         >
+                          <input
+                            type="hidden"
+                            name="intent"
+                            value="update-post"
+                          />
+                          <input type="hidden" name="postId" value={post._id} />
                           <div>
                             <label
                               className="block text-xs font-medium text-gray-700 mb-1"
@@ -728,13 +856,15 @@ export default function Profile() {
                             <input
                               id={`title-${post._id}`}
                               type="text"
+                              name="title"
                               value={editForm.title}
-                              onChange={(event) =>
+                              onChange={(event) => {
                                 setEditForm((prev) => ({
                                   ...prev,
                                   title: event.target.value,
-                                }))
-                              }
+                                }));
+                                setError("");
+                              }}
                               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
                             />
                           </div>
@@ -747,13 +877,15 @@ export default function Profile() {
                             </label>
                             <select
                               id={`status-${post._id}`}
+                              name="status"
                               value={editForm.status}
-                              onChange={(event) =>
+                              onChange={(event) => {
                                 setEditForm((prev) => ({
                                   ...prev,
                                   status: event.target.value as Post["status"],
-                                }))
-                              }
+                                }));
+                                setError("");
+                              }}
                               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
                             >
                               <option value="published">Published</option>
@@ -770,13 +902,15 @@ export default function Profile() {
                             </label>
                             <textarea
                               id={`content-${post._id}`}
+                              name="content"
                               value={editForm.content}
-                              onChange={(event) =>
+                              onChange={(event) => {
                                 setEditForm((prev) => ({
                                   ...prev,
                                   content: event.target.value,
-                                }))
-                              }
+                                }));
+                                setError("");
+                              }}
                               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
                               rows={4}
                             />
@@ -791,13 +925,15 @@ export default function Profile() {
                             <input
                               id={`tags-${post._id}`}
                               type="text"
+                              name="tags"
                               value={editForm.tags}
-                              onChange={(event) =>
+                              onChange={(event) => {
                                 setEditForm((prev) => ({
                                   ...prev,
                                   tags: event.target.value,
-                                }))
-                              }
+                                }));
+                                setError("");
+                              }}
                               onKeyDown={handleTagKeyDown}
                               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
                             />
@@ -807,6 +943,7 @@ export default function Profile() {
                               type="submit"
                               disabled={savingPostId === post._id}
                               className="bg-amber-500 hover:bg-amber-600 text-white rounded-lg px-4 py-2 text-xs font-medium"
+                              aria-busy={savingPostId === post._id}
                             >
                               {savingPostId === post._id
                                 ? "Saving..."
@@ -821,7 +958,7 @@ export default function Profile() {
                               Cancel
                             </button>
                           </div>
-                        </form>
+                        </Form>
                       )}
                     </div>
                   </div>

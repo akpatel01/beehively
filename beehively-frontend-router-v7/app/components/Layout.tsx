@@ -27,6 +27,7 @@ const Layout = () => {
 
   const handleLogout = () => {
     removeCookie("token");
+    removeCookie("user");
     setToken(null);
     navigate("/login");
   };
@@ -67,20 +68,22 @@ const Layout = () => {
             {/* Nav buttons */}
             <div className="flex gap-2 sm:gap-3">
               <button
-                className={`px-4 sm:px-5 py-2 rounded-lg font-medium transition-all duration-200 ${isActive("/")
-                  ? "bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-lg shadow-amber-500/30"
-                  : "text-gray-700 hover:text-gray-900 hover:bg-gray-100"
-                  }`}
+                className={`px-4 sm:px-5 py-2 rounded-lg font-medium transition-all duration-200 ${
+                  isActive("/")
+                    ? "bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-lg shadow-amber-500/30"
+                    : "text-gray-700 hover:text-gray-900 hover:bg-gray-100"
+                }`}
                 onClick={() => navigate("/")}
               >
                 Home
               </button>
               {token && (
                 <button
-                  className={`px-4 sm:px-5 py-2 rounded-lg font-medium transition-all duration-200 ${isActive("/profile")
-                    ? "bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-lg shadow-amber-500/30"
-                    : "text-gray-700 hover:text-gray-900 hover:bg-gray-100"
-                    }`}
+                  className={`px-4 sm:px-5 py-2 rounded-lg font-medium transition-all duration-200 ${
+                    isActive("/profile")
+                      ? "bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-lg shadow-amber-500/30"
+                      : "text-gray-700 hover:text-gray-900 hover:bg-gray-100"
+                  }`}
                   onClick={() => navigate("/profile")}
                 >
                   Profile
@@ -89,19 +92,21 @@ const Layout = () => {
               {!token ? (
                 <>
                   <button
-                    className={`px-4 sm:px-5 py-2 rounded-lg font-medium transition-all duration-200 ${isActive("/login")
-                      ? "bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-lg shadow-amber-500/30"
-                      : "text-gray-700 hover:text-gray-900 hover:bg-gray-100"
-                      }`}
+                    className={`px-4 sm:px-5 py-2 rounded-lg font-medium transition-all duration-200 ${
+                      isActive("/login")
+                        ? "bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-lg shadow-amber-500/30"
+                        : "text-gray-700 hover:text-gray-900 hover:bg-gray-100"
+                    }`}
                     onClick={() => navigate("/login")}
                   >
                     Login
                   </button>
                   <button
-                    className={`px-4 sm:px-5 py-2 rounded-lg font-medium transition-all duration-200 ${isActive("/signup")
-                      ? "bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-lg shadow-amber-500/30"
-                      : "text-gray-700 hover:text-gray-900 hover:bg-gray-100"
-                      }`}
+                    className={`px-4 sm:px-5 py-2 rounded-lg font-medium transition-all duration-200 ${
+                      isActive("/signup")
+                        ? "bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-lg shadow-amber-500/30"
+                        : "text-gray-700 hover:text-gray-900 hover:bg-gray-100"
+                    }`}
                     onClick={() => navigate("/signup")}
                   >
                     Sign up
