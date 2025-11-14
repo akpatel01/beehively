@@ -6,6 +6,8 @@ A lightweight content publishing platform with separate frontend and backend app
 
 - `beehively-backend/` – Express + MongoDB API
 - `beehively-frontend/` – React + TypeScript client
+- `beehively-frontend-router-v7/` – React-router-v7 + TypeScript server
+
 
 ## Quick Start
 
@@ -17,6 +19,12 @@ npm run dev
 
 # Frontend
 cd beehively-frontend
+npm install
+npm run dev
+```
+
+# Frontend router-v7
+cd beehively-frontend-router-v7
 npm install
 npm run dev
 ```
